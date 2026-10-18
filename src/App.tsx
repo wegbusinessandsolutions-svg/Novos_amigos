@@ -680,10 +680,9 @@ export default function App() {
 function PageTransition({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
       className="w-full flex-1 flex flex-col"
     >
       {children}
@@ -982,10 +981,9 @@ function AnimatedRoutes({
         <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Carregando...</p>
       </div>
     }>
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          {/* Public Standalone Emergency Alert View (accessible via WhatsApp links without login) */}
-          <Route path="/sos/:id" element={<EmergencyAlertView />} />
+      <Routes>
+        {/* Public Standalone Emergency Alert View (accessible via WhatsApp links without login) */}
+        <Route path="/sos/:id" element={<EmergencyAlertView />} />
           <Route path="/alerta-sos/:id" element={<EmergencyAlertView />} />
 
           <Route element={
@@ -1050,6 +1048,22 @@ function AnimatedRoutes({
               }
             />
             <Route
+              path="/profile"
+              element={
+                <PageTransition>
+                  <ProfileDetails />
+                </PageTransition>
+              }
+            />
+            <Route
+              path="/profile-details"
+              element={
+                <PageTransition>
+                  <ProfileDetails />
+                </PageTransition>
+              }
+            />
+            <Route
               path="/quick-messages"
               element={
                 <PageTransition>
@@ -1095,7 +1109,6 @@ function AnimatedRoutes({
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
-      </AnimatePresence>
     </Suspense>
   );
 }

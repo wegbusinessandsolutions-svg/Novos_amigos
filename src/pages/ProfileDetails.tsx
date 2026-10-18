@@ -199,7 +199,7 @@ interface FloatingHeart {
 
 
 export default function ProfileDetails() {
-  const { id } = useParams();
+  const { id: paramId } = useParams();
   const navigate = useNavigate();
   
   const [currentUser, setCurrentUser] = useState<any>(auth.currentUser);
@@ -211,7 +211,8 @@ export default function ProfileDetails() {
     return () => unsubscribe();
   }, []);
 
-  const isOwnProfile = id === currentUser?.uid;
+  const id = paramId || currentUser?.uid;
+  const isOwnProfile = Boolean(id && currentUser?.uid && id === currentUser.uid);
 
   // Profile state
   const [profile, setProfile] = useState<any>(null);
@@ -678,23 +679,16 @@ export default function ProfileDetails() {
 
 
   // Enrichment function for mock/real profiles
-  const enrichProfile = (userId: string, baseProfile: any) => {
+  const enrichProfile = (userId: string | undefined, baseProfile: any, rawDocData?: any) => {
     // Generate deterministic values based on userId
-    const seedNum = parseInt(userId.replace(/\D/g, '') || '7') || 7;
+    const safeUserId = typeof userId === 'string' ? userId : '';
+    const seedNum = parseInt(safeUserId.replace(/\D/g, '') || '7', 10) || 7;
     const signs = ["Touro ♉", "Leão ♌", "Gêmeos  Gemini ♊", "Câncer ♋", "Áries ♈", "Virgem ♍", "Libra ♎", "Escorpião ♏", "Sagitário ♐", "Capricórnio ♑", "Aquário ♒", "Peixes ♓"];
     const objectives = ["Relacionamento sério", "Namoro", "Bate-papo casual", "Algo sério, mas sem pressa", "Amizade / Romance"];
     const civilStatusList = ["Solteiro(a)", "Solteiro(a)", "Divorciado(a)", "Solteiro(a)"];
     const professions = ["Designer de Interiores", "Arquiteto(a)", "Médico(a)", "Engenheiro(a) de Software", "Advogado(a)", "Fotógrafo(a)", "Chef de Cozinha", "Jornalista", "Psicólogo(a)"];
     const heights = ["1.65m", "1.72m", "1.68m", "1.82m", "1.60m", "1.85m", "1.70m", "1.76m"];
     const ethnicities = ["Branca", "Preta", "Parda", "Amarela", "Indígena"];
-    
-    const sign = signs[seedNum % signs.length];
-    const objetivo = baseProfile.objetivo || objectives[seedNum % objectives.length];
-    const estadoCivil = baseProfile.estadoCivil || civilStatusList[seedNum % civilStatusList.length];
-    const profissao = baseProfile.profissao || professions[seedNum % professions.length];
-    const altura = baseProfile.altura || heights[seedNum % heights.length];
-    const cor = baseProfile.cor || ethnicities[seedNum % ethnicities.length];
-    const telefone = baseProfile.telefone || `(11) 9${Math.floor(8000 + (seedNum * 73) % 1999)}-${Math.floor(1000 + (seedNum * 91) % 8999)}`;
     
     // Additional portrait galleries (beautiful portrait imagery)
     const malePics = [
@@ -711,37 +705,50 @@ export default function ProfileDetails() {
       'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=600&q=80',
       'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&q=80'
     ];
-    
-    const isMale = baseProfile.sexo === 'masculino';
+
+    const safeBase = {
+      ...(rawDocData || {}),
+      ...(baseProfile || {})
+    };
+
+    const isMale = (safeBase.sexo || '').toLowerCase() === 'masculino';
     const picsPool = isMale ? malePics : femalePics;
-    
+    const sign = signs[seedNum % signs.length];
+    const objetivo = safeBase.objetivo || objectives[seedNum % objectives.length];
+    const estadoCivil = safeBase.estadoCivil || civilStatusList[seedNum % civilStatusList.length];
+    const profissao = safeBase.profissao || professions[seedNum % professions.length];
+    const altura = safeBase.altura || heights[seedNum % heights.length];
+    const cor = safeBase.cor || ethnicities[seedNum % ethnicities.length];
+    const telefone = safeBase.telefone || `(11) 9${Math.floor(8000 + (seedNum * 73) % 1999)}-${Math.floor(1000 + (seedNum * 91) % 8999)}`;
+    const mainPhoto = safeBase.fotoPrincipalUrl || picsPool[seedNum % picsPool.length];
+
     const extraPics = [
-      baseProfile.fotoPrincipalUrl || picsPool[seedNum % picsPool.length],
+      mainPhoto,
       picsPool[(seedNum + 1) % picsPool.length],
       picsPool[(seedNum + 2) % picsPool.length],
     ];
-    
-    // Custom romantic icebreaker prompts matching the onboarding questions
+
+    const additionalPics = Array.isArray(safeBase.fotosAdicionais) ? safeBase.fotosAdicionais : [];
+    const fotosFinal = safeUserId.startsWith('mock')
+      ? extraPics
+      : (additionalPics.length > 0 ? [mainPhoto, ...additionalPics].filter(Boolean) : [mainPhoto]);
+
     const prompts = [
       {
         title: "Um fato divertido sobre mim é...",
-        desc: baseProfile.resposta1 || (isMale 
+        desc: safeBase.resposta1 || (isMale 
           ? "Eu toco violão de ouvido e sei fazer a melhor receita de risoto de queijo brie com damasco."
           : "Consigo analisar o mapa astral básico de alguém em poucos minutos (e juro que não julgo pela primeira impressão!).")
       },
       {
         title: "Eu passo a maior parte do meu tempo...",
-        desc: baseProfile.resposta2 || (isMale
+        desc: safeBase.resposta2 || (isMale
           ? "Trabalhando com tecnologia, praticando esportes ou curtindo o final de semana."
           : "Praticando yoga, cuidando das minhas plantas e lendo bons romances.")
       }
     ];
-    
-    const pickedPrompts = [
-      prompts[0],
-      prompts[1]
-    ];
-    
+
+    const rawHobbies = safeBase.hobbies;
     const hobbiesList = [
       ["Café Especial ☕", "Viagens ✈️", "Fotografia 📸", "Yoga 🧘‍♀️"],
       ["Cerveja Artesanal 🍺", "Guitarras 🎸", "Futebol ⚽", "Academia 🏋️‍♂️"],
@@ -749,47 +756,50 @@ export default function ProfileDetails() {
       ["Trilhas Ecológicas ⛰️", "Natureza 🌿", "Pets 🐾", "Acampar 🏕️"],
       ["Séries & Netflix 🎬", "Corrida de rua 🏃", "Teatro/Arte 🎭", "Praia 🏖️"]
     ];
-    
-    const rawHobbies = baseProfile.hobbies || hobbiesList[seedNum % hobbiesList.length];
     const hobbies = typeof rawHobbies === 'string'
       ? rawHobbies.split(',').map((s: string) => s.trim()).filter(Boolean)
-      : Array.isArray(rawHobbies)
+      : Array.isArray(rawHobbies) && rawHobbies.length > 0
         ? rawHobbies
-        : [];
+        : hobbiesList[seedNum % hobbiesList.length];
 
-    const lifestyle = [
-      { label: "Esportes", value: seedNum % 2 === 0 ? "Frequente" : "Às vezes" },
-      { label: "Bebidas", value: seedNum % 3 === 0 ? "Socialmente" : "Não bebo" },
-      { label: "Fumante", value: "Não" },
-      { label: "Pet Favorito", value: "Ama pets 🐾" }
-    ];
+    const lifestyle = Array.isArray(safeBase.lifestyle) && safeBase.lifestyle.length > 0
+      ? safeBase.lifestyle
+      : [
+          { label: "Esportes", value: seedNum % 2 === 0 ? "Frequente" : "Às vezes" },
+          { label: "Bebidas", value: seedNum % 3 === 0 ? "Socialmente" : "Não bebo" },
+          { label: "Fumante", value: "Não" },
+          { label: "Pet Favorito", value: "Ama pets 🐾" }
+        ];
 
     return {
-      ...baseProfile,
-      signo: baseProfile.signo || sign,
+      ...safeBase,
+      nome: safeBase.nome || (safeBase.email ? safeBase.email.split('@')[0] : 'Usuário'),
+      apelido: safeBase.apelido || safeBase.nome || 'usuario',
+      signo: safeBase.signo || sign,
       objetivo,
       estadoCivil,
       profissao,
       altura,
       cor,
       telefone,
-      fotos: userId.startsWith('mock') ? extraPics : (baseProfile.fotosAdicionais && baseProfile.fotosAdicionais.length > 0 
-        ? [baseProfile.fotoPrincipalUrl, ...baseProfile.fotosAdicionais] 
-        : [baseProfile.fotoPrincipalUrl]),
-      prompts: baseProfile.prompts || pickedPrompts,
+      fotoPrincipalUrl: mainPhoto,
+      fotos: fotosFinal.length > 0 ? fotosFinal : [mainPhoto],
+      prompts: Array.isArray(safeBase.prompts) && safeBase.prompts.length > 0 ? safeBase.prompts : prompts,
       hobbies,
-      lifestyle: baseProfile.lifestyle || lifestyle
+      lifestyle
     };
   };
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setLoading(false);
+      return;
+    }
 
     let unsubscribeProfile: (() => void) | null = null;
     let unsubscribeReqSent: (() => void) | null = null;
     let unsubscribeReqRec: (() => void) | null = null;
     let unsubscribeConn: (() => void) | null = null;
-    let unsubscribeVerify: (() => void) | null = null;
     let unsubscribeMyLoc: (() => void) | null = null;
     let unsubscribeUserLoc: (() => void) | null = null;
 
@@ -805,7 +815,7 @@ export default function ProfileDetails() {
           visitedId: id,
           timestamp: Date.now()
         }, { merge: true }).catch(err => {
-          handleFirestoreError(err, OperationType.WRITE, `profileViews/${viewId}`);
+          console.warn(`[ProfileDetails] Profile view tracking notice:`, err);
         });
       }
       
@@ -815,7 +825,7 @@ export default function ProfileDetails() {
           const cached = localStorage.getItem(`user_profile_cache_${currentUser.uid}`);
           if (cached) {
             const cachedData = JSON.parse(cached);
-            let finalProfile = enrichProfile(currentUser.uid, cachedData.profile);
+            let finalProfile = enrichProfile(currentUser.uid, cachedData.profile || cachedData, cachedData);
             if (cachedData.batterySaverEnabled !== undefined) {
               setBatterySaverEnabled(cachedData.batterySaverEnabled === true);
             }
@@ -835,7 +845,7 @@ export default function ProfileDetails() {
         // 1. Check if it's a mock user first
         const matchedMock = MOCK_USERS.find(u => u.userId === id);
         if (matchedMock) {
-          let finalProfile = enrichProfile(id, matchedMock.profile);
+          let finalProfile = enrichProfile(id, matchedMock.profile || matchedMock, matchedMock);
           finalProfile.distancia = matchedMock.distance;
           finalProfile.distanceValue = matchedMock.distanceValue;
           setProfile(finalProfile);
@@ -846,12 +856,9 @@ export default function ProfileDetails() {
         } else {
           // 2. Fetch from Firestore with onSnapshot for real-time updates!
           const docRef = doc(db, 'users', id);
-          console.log(`[ProfileDetails onSnapshot] Registering onSnapshot listener for user: ${id}`);
           unsubscribeProfile = onSnapshot(docRef, async (docSnap) => {
-            console.log(`[ProfileDetails onSnapshot] Listener fired for user ${id}. Doc exists: ${docSnap.exists()}`);
             if (docSnap.exists()) {
               const userData = docSnap.data();
-              console.log("[ProfileDetails onSnapshot] Document data received:", JSON.stringify(userData, null, 2));
               
               // Sync our own profile snapshot to cache
               if (isOwnProfile) {
@@ -866,7 +873,7 @@ export default function ProfileDetails() {
                 }
               }
 
-              let finalProfile = enrichProfile(id, userData.profile);
+              let finalProfile = enrichProfile(id, userData.profile || userData, userData);
               let finalVerified = userData.verified || false;
               let finalFacialVerified = userData.facialVerified || userData.profile?.facialVerified || false;
               let finalIdVerified = userData.idVerified || false;
@@ -914,7 +921,7 @@ export default function ProfileDetails() {
                       };
 
                       // Update state
-                      setProfile(prev => {
+                      setProfile((prev: any) => {
                         if (!prev) return prev;
                         return {
                           ...prev,
@@ -934,7 +941,7 @@ export default function ProfileDetails() {
                     calculateAndSetDistance(lastMyLocData, lastUserLocData);
                   }
                 }, (err) => {
-                  console.error("Error listening to current user location:", err);
+                  console.warn("Notice: location listener for currentUser:", err);
                 });
 
                 unsubscribeUserLoc = onSnapshot(userLocRef, (snap) => {
@@ -943,7 +950,7 @@ export default function ProfileDetails() {
                     calculateAndSetDistance(lastMyLocData, lastUserLocData);
                   }
                 }, (err) => {
-                  console.error("Error listening to visited user location:", err);
+                  console.warn("Notice: location listener for visitedUser:", err);
                 });
               }
 
@@ -968,12 +975,10 @@ export default function ProfileDetails() {
               setLoading(false);
             }
           }, (err) => {
-            handleFirestoreError(err, OperationType.GET, `users/${id}`);
-            setError('Erro ao carregar os dados do perfil.');
+            console.warn(`[ProfileDetails] Warning loading user doc for ${id}:`, err);
+            setError('Não foi possível carregar os dados deste perfil no momento.');
             setLoading(false);
           });
-
-
         }
 
         // 3. Check connection/friend requests status if logged in using real-time onSnapshot!
@@ -1012,14 +1017,14 @@ export default function ProfileDetails() {
             sentData = snap.exists() ? snap.data() : null;
             updateConnectionState(sentData, recData);
           }, (err) => {
-            handleFirestoreError(err, OperationType.GET, `friendRequests/${currentUser?.uid}_${id}`);
+            console.warn("Notice: reqSent listener:", err);
           });
 
           unsubscribeReqRec = onSnapshot(reqRecRef, (snap) => {
             recData = snap.exists() ? snap.data() : null;
             updateConnectionState(sentData, recData);
           }, (err) => {
-            handleFirestoreError(err, OperationType.GET, `friendRequests/${id}_${currentUser?.uid}`);
+            console.warn("Notice: reqRec listener:", err);
           });
           
           const q = query(
@@ -1038,7 +1043,7 @@ export default function ProfileDetails() {
               setEmailRevealed(false);
             }
           }, (err) => {
-            handleFirestoreError(err, OperationType.LIST, 'connections');
+            console.warn("Notice: connections listener:", err);
           });
         }
       } catch (err: any) {
@@ -3458,7 +3463,7 @@ export default function ProfileDetails() {
               </div>
             </div>
             
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {!phoneRevealed ? (
                 profile?.statusBolinha === 'indisponivel' ? (
                   <motion.div 
@@ -3532,7 +3537,7 @@ export default function ProfileDetails() {
               </div>
             </div>
             
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {!emailRevealed ? (
                 profile?.statusBolinha === 'indisponivel' ? (
                   <motion.div 

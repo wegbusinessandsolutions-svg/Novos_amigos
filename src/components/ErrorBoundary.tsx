@@ -25,14 +25,23 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    const errorMsg = error?.message || String(error);
+    if (errorMsg.includes('removeChild') || errorMsg.includes('not a child') || errorMsg.includes('Node')) {
+      // Auto-recover from transient React 19 DOM detachment collisions
+      setTimeout(() => {
+        this.setState({ hasError: false, error: null });
+      }, 50);
+    }
   }
 
   private handleReload = () => {
+    this.setState({ hasError: false, error: null });
     window.location.reload();
   };
 
   private handleGoHome = () => {
-    window.location.href = '/';
+    this.setState({ hasError: false, error: null });
+    window.location.hash = '#/';
   };
 
   public render() {

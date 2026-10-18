@@ -1,5 +1,6 @@
-export const getDemonym = (state: string, gender: string = 'masculino'): string => {
-  const isFemale = gender.toLowerCase() === 'feminino';
+export const getDemonym = (state?: string | null, gender?: string | null): string => {
+  if (!state || typeof state !== 'string') return '';
+  const isFemale = (gender || 'masculino').toLowerCase().trim() === 'feminino';
   
   const map: Record<string, { m: string, f: string }> = {
     'Acre': { m: 'Acriano', f: 'Acriana' },
@@ -16,7 +17,7 @@ export const getDemonym = (state: string, gender: string = 'masculino'): string 
     'Mato Grosso do Sul': { m: 'Sul-Mato-Grossense', f: 'Sul-Mato-Grossense' },
     'Minas Gerais': { m: 'Mineiro', f: 'Mineira' },
     'Pará': { m: 'Paraense', f: 'Paraense' },
-    'Paraíba': { m: 'Paraibana', f: 'Paraibana' }, // Adjusted to Paraibano for M based on logic, user said Paraibana/Paraibana but that's likely a typo
+    'Paraíba': { m: 'Paraibano', f: 'Paraibana' },
     'Paraná': { m: 'Paranaense', f: 'Paranaense' },
     'Pernambuco': { m: 'Pernambucano', f: 'Pernambucana' },
     'Piauí': { m: 'Piauiense', f: 'Piauiense' },
@@ -31,8 +32,9 @@ export const getDemonym = (state: string, gender: string = 'masculino'): string 
     'Tocantins': { m: 'Tocantinense', f: 'Tocantinense' }
   };
 
-  const entry = map[state];
-  if (!entry) return state; // Fallback to state name if not found
-  
+  const cleanState = state.trim();
+  const entry = map[cleanState];
+  if (!entry) return cleanState;
+
   return isFemale ? entry.f : entry.m;
 };

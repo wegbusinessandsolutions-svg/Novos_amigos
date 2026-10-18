@@ -809,7 +809,10 @@ ${companionSection}${photosSection}
             <h1 className="text-base sm:text-lg font-medium tracking-tight text-indigo-600 dark:text-indigo-400 flex items-center font-friendly truncate">
               <span className="truncate">
                 {(() => {
-                  const title = appTitle || 'www.novosamigos.com.br';
+                  let title = appTitle || 'www.novosamigos.com.br';
+                  if (title.includes('novoamigos')) {
+                    title = title.replace('novoamigos', 'novosamigos');
+                  }
                   const wwwMatch = title.match(/^(www\.)(.*?)(\.com\.br|\.br)?$/i);
                   if (wwwMatch) {
                     const [, prefix, middle, suffix] = wwwMatch;

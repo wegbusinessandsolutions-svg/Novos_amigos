@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { 
   Shield, 
@@ -28,9 +29,12 @@ import {
   Compass,
   Clock,
   RefreshCw,
-  CreditCard
+  CreditCard,
+  KeyRound,
+  Mail,
+  Eye
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { getUserRegistrationId } from '../utils/userId';
 import ZodiacBadge from '../components/ZodiacBadge';
@@ -129,6 +133,11 @@ export default function AdminCRM() {
   const [reportUserLocation, setReportUserLocation] = useState<any | null>(null);
   const [reportUserLocationHistory, setReportUserLocationHistory] = useState<any[]>([]);
   const [locationLoading, setLocationLoading] = useState(false);
+
+  // Password reset modal state
+  const [resetModalUser, setResetModalUser] = useState<CrmUser | null>(null);
+  const [sendingReset, setSendingReset] = useState(false);
+  const [resetFeedback, setResetFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const navigate = useNavigate();
 
@@ -544,6 +553,48 @@ export default function AdminCRM() {
     }
   };
 
+  const handleSendPasswordReset = (user: CrmUser) => {
+    const email = getUserEmail(user);
+    if (!email || email === 'Não informado' || !email.includes('@')) {
+      alert(`Este usuário (${getUserNome(user)}) não possui um endereço de e-mail válido cadastrado.`);
+      return;
+    }
+    setResetModalUser(user);
+    setResetFeedback(null);
+  };
+
+  const handleConfirmSendReset = async () => {
+    if (!resetModalUser) return;
+    const email = getUserEmail(resetModalUser);
+    
+    setSendingReset(true);
+    setResetFeedback(null);
+    try {
+      auth.languageCode = 'pt';
+      await sendPasswordResetEmail(auth, email);
+      setResetFeedback({
+        type: 'success',
+        message: `Link de redefinição de senha enviado com sucesso para ${email}! O usuário receberá as instruções por e-mail para cadastrar uma nova senha.`
+      });
+    } catch (err: any) {
+      console.error("Erro ao enviar redefinição de senha:", err);
+      let errorMsg = 'Erro ao enviar o link de redefinição de senha. Tente novamente.';
+      if (err.code === 'auth/user-not-found') {
+        errorMsg = 'Nenhuma conta encontrada com este e-mail no sistema de autenticação.';
+      } else if (err.code === 'auth/invalid-email') {
+        errorMsg = 'O endereço de e-mail informado é inválido.';
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      setResetFeedback({
+        type: 'error',
+        message: errorMsg
+      });
+    } finally {
+      setSendingReset(false);
+    }
+  };
+
   const handleSaveSettings = async (updatedSettings: typeof appConfig) => {
     setConfigLoading(true);
     try {
@@ -839,10 +890,19 @@ export default function AdminCRM() {
                           {/* 1. Editar */}
                           <button
                             onClick={() => handleOpenEdit(user)}
-                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
                             title="Editar Dados e Função"
                           >
                             <Edit2 className="w-4 h-4" />
+                          </button>
+
+                          {/* 1.5 Enviar Redefinição de Senha por E-mail */}
+                          <button
+                            onClick={() => handleSendPasswordReset(user)}
+                            className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                            title="Enviar Link de Redefinição de Senha por E-mail"
+                          >
+                            <KeyRound className="w-4 h-4" />
                           </button>
 
                           {/* 2. Bloquear / Desbloquear */}
@@ -968,10 +1028,19 @@ export default function AdminCRM() {
                           {/* 1. Editar */}
                           <button
                             onClick={() => handleOpenEdit(user)}
-                            className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors"
+                            className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors cursor-pointer"
                             title="Editar"
                           >
                             <Edit2 className="w-4.5 h-4.5" />
+                          </button>
+
+                          {/* 1.5 Enviar Redefinição de Senha */}
+                          <button
+                            onClick={() => handleSendPasswordReset(user)}
+                            className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors cursor-pointer"
+                            title="Enviar Link de Redefinição de Senha por E-mail"
+                          >
+                            <KeyRound className="w-4.5 h-4.5" />
                           </button>
 
                           {/* 2. Bloquear */}
@@ -1390,6 +1459,18 @@ export default function AdminCRM() {
                 </button>
               </div>
 
+              {/* Envio de Redefinição de Senha */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleSendPasswordReset(editingUser)}
+                  className="w-full py-2.5 text-xs font-bold rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <KeyRound className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                  <span>Enviar Link de Redefinição de Senha por E-mail</span>
+                </button>
+              </div>
+
             </form>
 
             {/* Modal Sticky Footer with Confirmation Buttons - ALWAYS VISIBLE on mobile & desktop */}
@@ -1697,6 +1778,120 @@ export default function AdminCRM() {
       )}
 
 
+
+      {/* --- MODAL 3: SEND PASSWORD RESET EMAIL --- */}
+      {resetModalUser && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-slate-800 dark:to-slate-850 border-b border-indigo-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-md shadow-indigo-200 dark:shadow-none">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base leading-tight">
+                    Redefinição de Senha
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                    Envio de link oficial de recuperação por e-mail
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setResetModalUser(null); setResetFeedback(null); }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-white/80 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              {resetFeedback ? (
+                <div className="space-y-4 text-center py-2">
+                  <div className={`w-14 h-14 mx-auto rounded-full flex items-center justify-center ${
+                    resetFeedback.type === 'success' 
+                      ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' 
+                      : 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'
+                  }`}>
+                    {resetFeedback.type === 'success' ? (
+                      <CheckCircle className="w-8 h-8" />
+                    ) : (
+                      <AlertCircle className="w-8 h-8" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="font-black text-slate-800 dark:text-slate-100 text-base">
+                      {resetFeedback.type === 'success' ? 'E-mail Enviado com Sucesso!' : 'Falha no Envio'}
+                    </h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-sm mx-auto">
+                      {resetFeedback.message}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setResetModalUser(null); setResetFeedback(null); }}
+                    className="w-full mt-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700 space-y-2 text-xs">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Nome do Usuário:</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{getUserNome(resetModalUser)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">ID de Registro:</span>
+                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{getUserRegistrationId(resetModalUser)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">E-mail Cadastrado:</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100 break-all">{getUserEmail(resetModalUser)}</span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    O sistema enviará o link oficial e seguro de redefinição de senha para o e-mail acima. Ao clicar no link, o usuário poderá cadastrar uma nova senha imediatamente. O link expira em 1 hora.
+                  </p>
+
+                  <div className="flex gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setResetModalUser(null)}
+                      disabled={sendingReset}
+                      className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmSendReset}
+                      disabled={sendingReset}
+                      className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-extrabold text-xs transition-all shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {sendingReset ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Enviando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="w-4 h-4" />
+                          <span>Enviar Link por E-mail</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Real-time Notification Banner for Admins */}
       <AnimatePresence>
