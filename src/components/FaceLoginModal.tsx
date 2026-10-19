@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, ShieldCheck, AlertCircle, CheckCircle2, X, RefreshCw, Lock, Sparkles, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { setSecureItem, getSecureItem } from '../utils/secureStorage';
 
 interface FaceLoginModalProps {
   isOpen: boolean;
@@ -149,19 +150,14 @@ export default function FaceLoginModal({
         setStatusMessage(`Identidade confirmada! ${data.confidence}% de correspondência biométrica.`);
 
         // Check if device already has cached password for this user
-        const cachedStr =
-          localStorage.getItem(`face_login_credentials_${email.trim().toLowerCase()}`) ||
-          localStorage.getItem('face_login_credentials');
+        const cachedUser =
+          (await getSecureItem(`face_login_credentials_${email.trim().toLowerCase()}`)) ||
+          (await getSecureItem('face_login_credentials'));
 
         let cachedPassword = '';
-        if (cachedStr) {
-          try {
-            const parsed = JSON.parse(cachedStr);
-            if (parsed.email?.toLowerCase() === email.trim().toLowerCase() && parsed.password) {
-              cachedPassword = parsed.password;
-            }
-          } catch (e) {
-            console.warn('Erro ao ler credencial facial em cache:', e);
+        if (cachedUser) {
+          if (cachedUser.email?.toLowerCase() === email.trim().toLowerCase() && cachedUser.password) {
+            cachedPassword = cachedUser.password;
           }
         }
 
@@ -202,14 +198,14 @@ export default function FaceLoginModal({
     setIsSubmittingLink(true);
     try {
       await onSuccess(linkingPassword);
-      // Save for subsequent 100% passwordless logins
-      localStorage.setItem(
+      // Save in encrypted secure device storage (AES-GCM)
+      await setSecureItem(
         `face_login_credentials_${email.trim().toLowerCase()}`,
-        JSON.stringify({
+        {
           email: email.trim().toLowerCase(),
           password: linkingPassword,
           linkedAt: new Date().toISOString(),
-        })
+        }
       );
     } catch (err: any) {
       console.error('Erro ao vincular senha:', err);

@@ -131,6 +131,7 @@ import { convertToDDMMAAAA } from '../utils/migration';
 import ZodiacBadge from '../components/ZodiacBadge';
 import { getZodiacSignFromDate, getZodiacSignByName, resolveUserZodiac } from '../utils/zodiac';
 import { formatBrazilianPhone } from '../utils/phone';
+import { setSecureItem, getSecureItem, removeSecureItem } from '../utils/secureStorage';
 
 import { 
   ChevronLeft, 
@@ -178,7 +179,7 @@ import {
   Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MOCK_USERS } from './Discover';
+import { MOCK_USERS } from '../utils/mockUsers';
 import { 
   evaluateUserSubscription, 
   formatCurrencyBRL, 
@@ -412,13 +413,13 @@ export default function ProfileDetails() {
           await videoRef.current.play();
         } catch (err) {
           if (err instanceof Error && err.name !== 'AbortError') {
-            console.error("Video play error in profile details:", err);
+            console.warn("Video play notice in profile details:", err);
           }
         }
       }
     } catch (err) {
       if (isCameraActiveRef.current) {
-        console.error("Camera access error:", err);
+        console.warn("Camera access denied or unavailable in profile details:", err);
         setHasCameraError(true);
       }
     }
@@ -1060,7 +1061,6 @@ export default function ProfileDetails() {
       if (unsubscribeReqSent) unsubscribeReqSent();
       if (unsubscribeReqRec) unsubscribeReqRec();
       if (unsubscribeConn) unsubscribeConn();
-      if (unsubscribeVerify) unsubscribeVerify();
       if (unsubscribeMyLoc) unsubscribeMyLoc();
       if (unsubscribeUserLoc) unsubscribeUserLoc();
     };
@@ -1373,23 +1373,20 @@ export default function ProfileDetails() {
   }, [faceVerifyStep]);
 
   useEffect(() => {
+    let isMounted = true;
     if (isOwnProfile && currentUser) {
-      try {
-        const cachedCredsStr = localStorage.getItem('face_login_credentials');
-        if (cachedCredsStr) {
-          const cachedCreds = JSON.parse(cachedCredsStr);
-          if (cachedCreds.email === currentUser.email) {
-            setFaceLoginEnabled(true);
-          } else {
-            setFaceLoginEnabled(false);
-          }
+      getSecureItem('face_login_credentials').then((cachedCreds: any) => {
+        if (!isMounted) return;
+        if (cachedCreds && cachedCreds.email === currentUser.email) {
+          setFaceLoginEnabled(true);
         } else {
           setFaceLoginEnabled(false);
         }
-      } catch (err) {
-        console.error("Error reading face_login_credentials:", err);
-      }
+      }).catch((err) => {
+        console.warn("Could not check face_login_credentials:", err);
+      });
     }
+    return () => { isMounted = false; };
   }, [isOwnProfile, currentUser]);
 
   const handleToggleFaceLogin = async () => {
@@ -1397,7 +1394,8 @@ export default function ProfileDetails() {
     
     if (faceLoginEnabled) {
       try {
-        localStorage.removeItem('face_login_credentials');
+        removeSecureItem('face_login_credentials');
+        removeSecureItem(`face_login_credentials_${currentUser.email?.toLowerCase()}`);
         setFaceLoginEnabled(false);
         await updateDoc(doc(db, 'users', currentUser.uid), {
           faceLoginEnabled: false
@@ -1464,14 +1462,18 @@ export default function ProfileDetails() {
         const credential = EmailAuthProvider.credential(currentUser.email, faceLoginPassword);
         await reauthenticateWithCredential(currentUser, credential);
         
-        const credPayload = JSON.stringify({
+        await setSecureItem('face_login_credentials', {
           email: currentUser.email,
           password: faceLoginPassword,
           userId: currentUser.uid,
           enabledAt: new Date().toISOString()
         });
-        localStorage.setItem('face_login_credentials', credPayload);
-        localStorage.setItem(`face_login_credentials_${currentUser.email.toLowerCase()}`, credPayload);
+        await setSecureItem(`face_login_credentials_${currentUser.email.toLowerCase()}`, {
+          email: currentUser.email,
+          password: faceLoginPassword,
+          userId: currentUser.uid,
+          enabledAt: new Date().toISOString()
+        });
         
         await updateDoc(doc(db, 'users', currentUser.uid), {
           faceLoginEnabled: true
@@ -1519,16 +1521,14 @@ export default function ProfileDetails() {
         
         // Se o login facial estiver ativado, atualizar as credenciais no cache local
         try {
-          const cachedCredsStr = localStorage.getItem('face_login_credentials');
-          if (cachedCredsStr) {
-            const cachedCreds = JSON.parse(cachedCredsStr);
-            if (cachedCreds.email === currentUser.email) {
-              cachedCreds.password = newPassword;
-              localStorage.setItem('face_login_credentials', JSON.stringify(cachedCreds));
-            }
+          const cachedCreds = await getSecureItem<any>('face_login_credentials');
+          if (cachedCreds && cachedCreds.email === currentUser.email) {
+            cachedCreds.password = newPassword;
+            await setSecureItem('face_login_credentials', cachedCreds);
+            await setSecureItem(`face_login_credentials_${currentUser.email.toLowerCase()}`, cachedCreds);
           }
         } catch (cacheErr) {
-          console.error("Error updating face login credentials after password change:", cacheErr);
+          console.warn("Notice updating face login credentials after password change:", cacheErr);
         }
         
         setChangePasswordSuccess('Sua senha foi alterada com sucesso!');
@@ -1704,6 +1704,15 @@ export default function ProfileDetails() {
       };
 
       const updatePayload = removeUndefined({
+        nome: editNome,
+        apelido: editApelido,
+        telefone: editTelefone,
+        sexo: editSexo,
+        cidadeNascimento: editCidadeNascimento,
+        estadoNascimento: editEstadoNascimento,
+        fotoPrincipalUrl: finalFotoPrincipalUrl,
+        statusBolinha: editStatusBolinha,
+        updatedAt: serverTimestamp(),
         'profile.nome': editNome,
         'profile.apelido': editApelido,
         'profile.dataNascimento': editDataNascimento,

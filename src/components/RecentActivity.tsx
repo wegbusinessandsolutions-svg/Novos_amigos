@@ -9,7 +9,7 @@ import {
   doc 
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { MOCK_USERS } from '../pages/Discover';
+import { MOCK_USERS } from '../utils/mockUsers';
 import { 
   Flame, 
   MessageSquare, 

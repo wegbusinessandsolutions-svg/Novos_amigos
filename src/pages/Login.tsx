@@ -133,40 +133,49 @@ export default function Login() {
     }
 
     // Special handler for Admin (admin or ceo@wegbusiness.com)
-    if (isAdminEmail && (rawInput === 'admin' || password === '02210839')) {
+    if (isAdminEmail) {
+      if (!password || password.length < 6) {
+        setError('A senha deve conter no mínimo 6 caracteres.');
+        setLoading(false);
+        return;
+      }
       try {
         sessionStorage.setItem('just_logged_in', 'true');
         await signInWithEmailAndPassword(auth, resolvedEmail, password);
       } catch (loginErr: any) {
-        try {
-          sessionStorage.setItem('just_logged_in', 'true');
-          const adminCred = await createUserWithEmailAndPassword(auth, resolvedEmail, password);
-          const adminRegId = generateUserRegistrationId();
-          const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
-          await setDoc(doc(db, 'users', adminCred.user.uid), {
-            codigoUsuario: adminRegId,
-            idNumerico: adminRegId,
-            email: resolvedEmail,
-            role: 'Admin',
-            nome: 'Administrador (Admin)',
-            apelido: 'admin',
-            telefone: '(62) 998160501',
-            criadoEm: Date.now(),
-            createdAt: serverTimestamp(),
-            verified: true,
-            profile: {
+        if (loginErr.code === 'auth/user-not-found' || loginErr.code === 'auth/invalid-credential') {
+          try {
+            sessionStorage.setItem('just_logged_in', 'true');
+            const adminCred = await createUserWithEmailAndPassword(auth, resolvedEmail, password);
+            const adminRegId = generateUserRegistrationId();
+            const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+            await setDoc(doc(db, 'users', adminCred.user.uid), {
               codigoUsuario: adminRegId,
               idNumerico: adminRegId,
+              email: resolvedEmail,
+              role: 'Admin',
               nome: 'Administrador (Admin)',
               apelido: 'admin',
               telefone: '(62) 998160501',
-              email: resolvedEmail,
-              statusBolinha: 'disponivel',
-              verified: true
-            }
-          }, { merge: true });
-        } catch (createErr: any) {
-          setError('Erro de autenticação para o usuário administrador. Verifique suas credenciais.');
+              criadoEm: Date.now(),
+              createdAt: serverTimestamp(),
+              verified: true,
+              profile: {
+                codigoUsuario: adminRegId,
+                idNumerico: adminRegId,
+                nome: 'Administrador (Admin)',
+                apelido: 'admin',
+                telefone: '(62) 998160501',
+                email: resolvedEmail,
+                statusBolinha: 'disponivel',
+                verified: true
+              }
+            }, { merge: true });
+          } catch (createErr: any) {
+            setError('Credenciais incorretas ou erro ao autenticar o administrador.');
+          }
+        } else {
+          setError('E-mail, usuário ou senha incorretos para o acesso de Administrador.');
         }
       } finally {
         setLoading(false);

@@ -1,8 +1,114 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email in [
+          'ceo@wegbusiness.com',
+          'wegbusinessandsolutions@gmail.com',
+          'sac@wegbusiness.com',
+          'ceo@newfriends.com'
+        ] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin')
+      );
+    }
+
+    // Public / user profiles
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if (isOwner(userId) && (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role != 'Admin')) || isAdmin();
+      allow update: if (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) || request.resource.data.role == resource.data.role)) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // User location and geolocation history
+    match /locations/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId) || isAdmin();
+      
+      match /history/{historyDocId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Chats and messaging
+    match /chats/{chatId} {
+      allow read, write: if isAuthenticated();
+      
+      match /{allSubcollections=**} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Friend requests & connections
+    match /friendRequests/{requestId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /connections/{connectionId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Quick icebreaker messages
+    match /shortMessages/{messageId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Profile visit logs
+    match /profileViews/{viewId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Emergency alerts / SOS signals (readable by emergency responders/contacts with direct link)
+    match /emergency_alerts/{alertId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Facial biometrics and identity verifications
+    match /facial_verifications/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    match /verificationRequests/{requestId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // User reports against inappropriate conduct
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Blocked users
+    match /blocks/{blockId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Subscriptions and payments
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Application global settings (only app_config is public, mercadopago/admin settings restricted to admins)
+    match /settings/{settingId} {
+      allow read: if settingId == 'app_config' || isAdmin();
+      allow write: if isAdmin();
     }
   }
 }

@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getDemonym } from '../lib/demonyms';
-import { MOCK_USERS, NearbyUser } from './Discover';
+import { MOCK_USERS, NearbyUser } from '../utils/mockUsers';
 import ZodiacBadge from '../components/ZodiacBadge';
 
 // Custom objectives for dating app fidelity

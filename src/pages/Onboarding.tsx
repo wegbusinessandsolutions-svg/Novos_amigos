@@ -221,6 +221,16 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
       const initialProfile = {
         codigoUsuario: userRegistrationId,
         idNumerico: userRegistrationId,
+        nome: formData.nome,
+        apelido: formData.apelido,
+        email: auth.currentUser.email,
+        sexo: formData.sexo,
+        genero: formData.genero,
+        telefone: formData.telefone,
+        fotoPrincipalUrl: finalFotoPrincipalUrl,
+        cidadeNascimento: formData.cidadeNascimento,
+        estadoNascimento: formData.estadoNascimento,
+        verified: shouldVerify,
         profile: {
           codigoUsuario: userRegistrationId,
           idNumerico: userRegistrationId,
@@ -269,9 +279,10 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
         },
         role: (auth.currentUser.email === 'ceo@wegbusiness.com' || auth.currentUser.email === 'wegbusinessandsolutions@gmail.com') ? 'Admin' : 'Usuário',
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       };
       
-      const setDocPromise = setDoc(userRef, initialProfile, { merge: true }); await Promise.race([setDocPromise, new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT_SAVING")), 5000))]);
+      await setDoc(userRef, initialProfile, { merge: true });
       
       // Initialize a location record so they show up on search results/discover/matches instantly
       try {

@@ -351,8 +351,13 @@ export default function AdminCRM() {
       const { doc, setDoc } = await import('firebase/firestore');
       const { db } = await import('../lib/firebase');
       
-      // Update nested profile and root role
+      // Update root fields, nested profile, and role in Firestore
       await setDoc(doc(db, 'users', editingUser.id), {
+        nome: editForm.nome,
+        apelido: editForm.apelido,
+        cidadeNascimento: editForm.cidadeNascimento,
+        estadoNascimento: editForm.estadoNascimento,
+        email: editForm.email,
         profile: {
           nome: editForm.nome,
           apelido: editForm.apelido,
@@ -830,8 +835,12 @@ export default function AdminCRM() {
                       <div key={user.id} className="grid grid-cols-[1.5fr_1fr_1.2fr_1fr_1.2fr] gap-4 p-4 items-center hover:bg-slate-50/50 transition-colors">
                         
                         {/* User identity cell */}
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-black shrink-0 relative">
+                        <Link 
+                          to={`/profile/${user.id}`}
+                          title={`Abrir perfil de ${nome}`}
+                          className="flex items-center gap-3 overflow-hidden group/user cursor-pointer"
+                        >
+                          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-black shrink-0 relative group-hover/user:ring-2 group-hover/user:ring-indigo-400 transition-all">
                             {getUserFoto(user) ? (
                               <img src={getUserFoto(user)} alt={nome} className="w-full h-full rounded-full object-cover" />
                             ) : (
@@ -845,7 +854,7 @@ export default function AdminCRM() {
                             )}
                           </div>
                           <div className="min-w-0">
-                            <h3 className="font-bold text-slate-800 truncate flex items-center gap-1.5 text-sm">
+                            <h3 className="font-bold text-slate-800 group-hover/user:text-indigo-600 transition-colors truncate flex items-center gap-1.5 text-sm">
                               {nome}
                               {verified && <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" aria-label="Verificado" />}
                             </h3>
@@ -857,7 +866,7 @@ export default function AdminCRM() {
                               {getUserIdade(user)} anos • {getUserSexo(user)}
                             </p>
                           </div>
-                        </div>
+                        </Link>
 
                         {/* Apelido Cell */}
                         <div className="min-w-0">
@@ -887,6 +896,15 @@ export default function AdminCRM() {
                         {/* Action column (Icon list) */}
                         <div className="flex items-center justify-end gap-1.5 pr-2">
                           
+                          {/* 0. Ver Perfil */}
+                          <Link
+                            to={`/profile/${user.id}`}
+                            className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                            title="Visualizar Perfil Completo"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
+
                           {/* 1. Editar */}
                           <button
                             onClick={() => handleOpenEdit(user)}
@@ -963,8 +981,12 @@ export default function AdminCRM() {
                     <div key={user.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-4">
                       
                       {/* Identity & Basic details */}
-                      <div className="flex items-start gap-3">
-                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-bold shrink-0 relative">
+                      <Link 
+                        to={`/profile/${user.id}`}
+                        title={`Abrir perfil de ${nome}`}
+                        className="flex items-start gap-3 group/muser cursor-pointer"
+                      >
+                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center font-bold shrink-0 relative group-hover/muser:ring-2 group-hover/muser:ring-indigo-400 transition-all">
                           {getUserFoto(user) ? (
                             <img src={getUserFoto(user)} alt={nome} className="w-full h-full rounded-full object-cover" />
                           ) : (
@@ -978,7 +1000,7 @@ export default function AdminCRM() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-bold text-slate-800 flex items-center gap-1.5 text-base">
+                          <h3 className="font-bold text-slate-800 group-hover/muser:text-indigo-600 transition-colors flex items-center gap-1.5 text-base">
                             {nome}
                             {verified && <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />}
                           </h3>
@@ -990,7 +1012,7 @@ export default function AdminCRM() {
                             {getUserIdade(user)} anos • {getUserSexo(user)}
                           </p>
                         </div>
-                      </div>
+                      </Link>
 
                       <hr className="border-slate-100" />
 
@@ -1025,6 +1047,15 @@ export default function AdminCRM() {
                         <div className="text-[10px] text-slate-400 font-bold uppercase">Ações do Admin:</div>
                         <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-100">
                           
+                          {/* 0. Ver Perfil */}
+                          <Link
+                            to={`/profile/${user.id}`}
+                            className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors cursor-pointer"
+                            title="Visualizar Perfil Completo"
+                          >
+                            <Eye className="w-4.5 h-4.5" />
+                          </Link>
+
                           {/* 1. Editar */}
                           <button
                             onClick={() => handleOpenEdit(user)}

@@ -4,7 +4,7 @@ import { LogOut, User, ChevronDown, HelpCircle, Siren, Users, Phone, Check, Load
 import { signOut } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, onSnapshot, updateDoc, addDoc, setDoc, collection, serverTimestamp, getDoc, query, where, getDocs } from 'firebase/firestore';
-import { MOCK_USERS } from '../pages/Discover';
+import { MOCK_USERS } from '../utils/mockUsers';
 import { openWhatsApp } from '../utils/whatsapp';
 import { resizeImage } from '../lib/resizeImage';
 import { PWAHeaderInstallButton } from './PWAInstallBanner';
