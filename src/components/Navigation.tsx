@@ -53,7 +53,7 @@ export default function Navigation() {
   const isAdmin = currentEmail === 'ceo@wegbusiness.com' || currentEmail === 'wegbusinessandsolutions@gmail.com' || currentEmail === 'sac@wegbusiness.com' || currentEmail === 'ceo@newfriends.com';
 
   return (
-    <nav className="absolute bottom-0 w-full bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-col z-50 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)]">
+    <nav className="w-full bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-col z-50 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] shrink-0 select-none">
       <div className="flex justify-around items-center pt-3 px-3 pb-[18px]">
         <Link id="tour-home" to="/" className={`transition-colors flex flex-col items-center gap-1 ${location.pathname === '/' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-indigo-500'}`}>
           <Home className="w-6 h-6" />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { 
   collection, 
   query, 
@@ -34,6 +35,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getDemonym } from '../lib/demonyms';
 import { MOCK_USERS, NearbyUser } from '../utils/mockUsers';
 import ZodiacBadge from '../components/ZodiacBadge';
+import { distanceBetween } from 'geofire-common';
 
 // Custom objectives for dating app fidelity
 const OBJECTIVES = [
@@ -59,9 +61,25 @@ const getObjectiveLabel = (obj: string) => {
 
 export default function FlirtSwipe() {
   const navigate = useNavigate();
-  const [profiles, setProfiles] = useState<NearbyUser[]>([]);
+
+  // Helper to load initial profiles with zero wait
+  const getInitialProfiles = (): NearbyUser[] => {
+    try {
+      const saved = localStorage.getItem('swiped_user_ids');
+      const swiped = saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+      const unswiped = MOCK_USERS.filter(m => !swiped.has(m.userId));
+      if (unswiped.length > 0) return unswiped;
+      // If user has swiped all, reset swiped for fresh continuous browsing
+      localStorage.removeItem('swiped_user_ids');
+      return [...MOCK_USERS];
+    } catch {
+      return [...MOCK_USERS];
+    }
+  };
+
+  const [profiles, setProfiles] = useState<NearbyUser[]>(getInitialProfiles);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<number[]>([]); // Track indices for Undo
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | 'up' | null>(null);
   
@@ -135,10 +153,19 @@ export default function FlirtSwipe() {
   // Generate 3 unique photos for each profile to feed the rotation carousel
   const profilePhotos = useMemo(() => {
     if (!currentProfile) return [];
-    const mainPhoto = currentProfile.profile?.fotoPrincipalUrl || `https://api.dicebear.com/9.x/notionists/svg?seed=${currentProfile.userId}`;
+    const prof = currentProfile.profile || {};
+    const mainPhoto = prof.fotoPrincipalUrl || `https://api.dicebear.com/9.x/notionists/svg?seed=${currentProfile.userId}`;
+    const extraPhotos = (prof.fotosAdicionais || []).filter(Boolean);
     
+    if (extraPhotos.length >= 2) {
+      return [mainPhoto, extraPhotos[0], extraPhotos[1]];
+    }
+    if (extraPhotos.length === 1) {
+      return [mainPhoto, extraPhotos[0], mainPhoto];
+    }
+
     // Fallback Unsplash galleries per gender
-    const isFemale = currentProfile.profile?.sexo === 'feminino';
+    const isFemale = (prof.sexo || '').toLowerCase() === 'feminino';
     const list = isFemale ? [
       'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80',
       'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&q=80',
@@ -161,10 +188,10 @@ export default function FlirtSwipe() {
       'https://images.unsplash.com/photo-1489980508314-941910ded1f4?w=400&q=80'
     ];
 
-    // Compute consistent indexes based on the profile userId
     let hash = 0;
-    for (let i = 0; i < currentProfile.userId.length; i++) {
-      hash = currentProfile.userId.charCodeAt(i) + ((hash << 5) - hash);
+    const uid = currentProfile.userId || 'user';
+    for (let i = 0; i < uid.length; i++) {
+      hash = uid.charCodeAt(i) + ((hash << 5) - hash);
     }
     const idx1 = Math.abs(hash) % list.length;
     const idx2 = Math.abs(hash + 1) % list.length;
@@ -195,111 +222,153 @@ export default function FlirtSwipe() {
   }, [currentIndex, hasMore, currentProfile?.userId]);
 
   useEffect(() => {
-    fetchSwipeProfiles();
+    let isMounted = true;
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!isMounted) return;
+      fetchSwipeProfiles(user);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
-  const fetchSwipeProfiles = async () => {
-    if (!auth.currentUser) return;
-    setLoading(true);
+  const fetchSwipeProfiles = async (currentUser = auth.currentUser) => {
     try {
-      // Fetch the current user's profile to get their interest/preference (interesse)
       let myInteresse = 'todos';
-      
-      // Load from local cache instantly
-      try {
-        const cached = localStorage.getItem(`user_profile_cache_${auth.currentUser.uid}`);
-        if (cached) {
-          const cachedData = JSON.parse(cached);
-          myInteresse = cachedData?.profile?.interesse || 'todos';
-          setCurrentUserProfile(cachedData);
-        }
-      } catch (cacheErr) {
-        console.error("Error reading cached user profile in FlirtSwipe:", cacheErr);
-      }
+      let myCoords: { lat: number; lng: number } | null = null;
 
-      const myUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      if (myUserDoc.exists()) {
-        const uData = myUserDoc.data();
-        myInteresse = uData?.profile?.interesse || 'todos';
-        setCurrentUserProfile(uData);
-        // Save to cache
+      if (currentUser) {
+        // Read cached profile for instant interest
         try {
-          localStorage.setItem(`user_profile_cache_${auth.currentUser.uid}`, JSON.stringify(uData));
-        } catch (cacheErr) {
-          console.error("Error writing user profile cache in FlirtSwipe:", cacheErr);
+          const cached = localStorage.getItem(`user_profile_cache_${currentUser.uid}`);
+          if (cached) {
+            const cachedData = JSON.parse(cached);
+            myInteresse = cachedData?.profile?.interesse || cachedData?.interesse || 'todos';
+            setCurrentUserProfile(cachedData);
+          }
+        } catch (e) {}
+
+        // Fetch user doc and location doc in parallel with 1.5s timeout
+        try {
+          const [userSnap, locSnap] = await Promise.all([
+            Promise.race([
+              getDoc(doc(db, 'users', currentUser.uid)),
+              new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+            ]).catch(() => null),
+            Promise.race([
+              getDoc(doc(db, 'locations', currentUser.uid)),
+              new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+            ]).catch(() => null)
+          ]);
+
+          if (userSnap && userSnap.exists()) {
+            const uData = userSnap.data();
+            myInteresse = uData?.profile?.interesse || uData?.interesse || myInteresse;
+            setCurrentUserProfile(uData);
+          }
+
+          if (locSnap && locSnap.exists()) {
+            const d = locSnap.data();
+            if (d.lat && d.lng) {
+              myCoords = { lat: d.lat, lng: d.lng };
+            }
+          }
+        } catch (e) {
+          console.warn("Could not fetch user/location in FlirtSwipe:", e);
         }
-      }
-
-      // Fetch coordinates of current user
-      let myCoords = null;
-      const myLocDoc = await getDoc(doc(db, 'locations', auth.currentUser.uid));
-      if (myLocDoc.exists()) {
-        const d = myLocDoc.data();
-        if (d.lat && d.lng) {
-          myCoords = { lat: d.lat, lng: d.lng };
-        }
-      }
-
-      // Query active locations
-      const locsQuery = query(collection(db, 'locations'), where('visivel', '==', true));
-      const locsSnap = await getDocs(locsQuery);
-
-      // Fetch blocked users
-      const blockedIds = new Set<string>([auth.currentUser.uid]); // exclude self
-      try {
-        const blockedByMeSnap = await getDocs(query(collection(db, 'blocks'), where('blockedBy', '==', auth.currentUser.uid)));
-        blockedByMeSnap.docs.forEach(d => {
-          const uId = d.data().blockedUser;
-          if (uId) blockedIds.add(uId);
-        });
-      } catch (err) {
-        console.warn('Could not fetch blockedByMe list:', err);
-      }
-
-      try {
-        const blockedMeSnap = await getDocs(query(collection(db, 'blocks'), where('blockedUser', '==', auth.currentUser.uid)));
-        blockedMeSnap.docs.forEach(d => {
-          const uId = d.data().blockedBy;
-          if (uId) blockedIds.add(uId);
-        });
-      } catch (err) {
-        console.warn('Could not fetch blockedMe list:', err);
       }
 
       const matchingList: NearbyUser[] = [];
-      const { distanceBetween } = await import('geofire-common');
+      const blockedIds = new Set<string>(currentUser ? [currentUser.uid] : []);
 
-      for (const d of locsSnap.docs) {
-        if (blockedIds.has(d.id)) continue;
-        const locData = d.data();
-        if (!locData.lat || !locData.lng) continue;
+      if (currentUser) {
+        try {
+          const [blockedByMeSnap, blockedMeSnap] = await Promise.all([
+            getDocs(query(collection(db, 'blocks'), where('blockedBy', '==', currentUser.uid))).catch(() => null),
+            getDocs(query(collection(db, 'blocks'), where('blockedUser', '==', currentUser.uid))).catch(() => null)
+          ]);
+          blockedByMeSnap?.docs.forEach(d => {
+            const uId = d.data().blockedUser;
+            if (uId) blockedIds.add(uId);
+          });
+          blockedMeSnap?.docs.forEach(d => {
+            const uId = d.data().blockedBy;
+            if (uId) blockedIds.add(uId);
+          });
+        } catch (e) {}
+      }
 
-        let distanceValue = 2000; // default mockup
-        let displayDistance = "Até 2 km";
+      // Fast fetch real users & locations in parallel
+      try {
+        const [locsSnap, usersSnap] = await Promise.all([
+          Promise.race([
+            getDocs(query(collection(db, 'locations'), where('visivel', '==', true))),
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+          ]).catch(() => null),
+          Promise.race([
+            getDocs(collection(db, 'users')),
+            new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+          ]).catch(() => null)
+        ]);
 
-        if (myCoords) {
-          const km = distanceBetween([locData.lat, locData.lng], [myCoords.lat, myCoords.lng]);
-          distanceValue = km * 1000;
-          displayDistance = km < 1 ? `Até ${Math.ceil(km * 1000)} m` : `Até ${Math.ceil(km)} km`;
+        const usersMap = new Map<string, any>();
+        if (usersSnap && usersSnap.docs) {
+          usersSnap.docs.forEach((uDoc: any) => {
+            usersMap.set(uDoc.id, uDoc.data());
+          });
         }
 
-        // Fetch user data
-        const userDoc = await getDoc(doc(db, 'users', d.id));
-        if (userDoc.exists()) {
-          const uData = userDoc.data();
-          if (uData?.status?.ativo && !uData?.status?.banido && uData?.ocultarPerfil !== true) {
-            matchingList.push({
-              userId: d.id,
-              distance: displayDistance,
-              distanceValue,
-              idVerified: uData?.idVerified || false,
-              profile: {
-                ...uData?.profile,
-                verified: uData?.verified
-              }
-            });
+        if (locsSnap && locsSnap.docs) {
+          for (const d of locsSnap.docs) {
+            if (blockedIds.has(d.id)) continue;
+            const locData = d.data();
+            if (!locData.lat || !locData.lng) continue;
+
+            let distanceValue = 2000;
+            let displayDistance = "Até 2 km";
+
+            if (myCoords) {
+              const km = distanceBetween([locData.lat, locData.lng], [myCoords.lat, myCoords.lng]);
+              distanceValue = km * 1000;
+              displayDistance = km < 1 ? `Até ${Math.ceil(km * 1000)} m` : `Até ${Math.ceil(km)} km`;
+            }
+
+            const uData = usersMap.get(d.id);
+            if (uData && uData?.status?.ativo !== false && !uData?.status?.banido && uData?.ocultarPerfil !== true) {
+              const pData = uData?.profile || {};
+              const nome = pData.nome || uData?.nome || 'Usuário';
+              const apelido = pData.apelido || uData?.apelido || nome;
+              const idade = Number(pData.idade || uData?.idade || 25);
+              const sexo = (pData.sexo || uData?.sexo || 'outro').toLowerCase();
+              const foto = pData.fotoPrincipalUrl || uData?.fotoPrincipalUrl || `https://api.dicebear.com/9.x/notionists/svg?seed=${d.id}`;
+
+              matchingList.push({
+                userId: d.id,
+                distance: displayDistance,
+                distanceValue,
+                idVerified: Boolean(uData?.idVerified || pData.idVerified),
+                profile: {
+                  ...pData,
+                  nome,
+                  apelido,
+                  idade,
+                  sexo,
+                  fotoPrincipalUrl: foto,
+                  verified: Boolean(uData?.verified || pData.verified),
+                  facialVerified: Boolean(uData?.facialVerified || pData.facialVerified),
+                  estadoNascimento: pData.estadoNascimento || uData?.estadoNascimento || '',
+                  bio: pData.bio || uData?.bio || '',
+                  objetivo: pData.objetivo || uData?.objetivo || '',
+                }
+              });
+            }
           }
         }
+      } catch (locErr) {
+        console.warn("Could not query live Firestore users for FlirtSwipe:", locErr);
       }
 
       // Add mock users to ensure plentiful cards
@@ -310,46 +379,42 @@ export default function FlirtSwipe() {
         }
       });
 
-      // Filter by interest (gênero de preferência)
+      // Filter by interest safely (defaulting to 'todos' if empty or invalid)
+      const rawInt = (myInteresse || 'todos').toString().toLowerCase().trim();
+      const myInt = (!rawInt || rawInt === 'todos' || rawInt === 'ambos') ? 'todos' : rawInt;
+
       const matchedByInterest = matchingList.filter(u => {
-        const myInt = myInteresse.toLowerCase();
-        if (myInt === 'todos' || myInt === 'ambos') return true;
-        const targetSexo = u.profile?.sexo?.toLowerCase();
+        if (myInt === 'todos') return true;
+        const targetSexo = (u.profile?.sexo || '').toLowerCase();
         if (myInt === 'homens' || myInt === 'masculino') return targetSexo === 'masculino';
         if (myInt === 'mulheres' || myInt === 'feminino') return targetSexo === 'feminino';
         return targetSexo === myInt;
       });
 
-      // Filter out profiles already swiped in this session
-      const filtered = matchedByInterest.filter(u => !swipedIds.has(u.userId));
-      
-      // Shuffle slightly or sort by distance
-      filtered.sort((a, b) => (a.distanceValue || 9999) - (b.distanceValue || 9999));
+      const effectiveProfiles = matchedByInterest.length > 0 ? matchedByInterest : matchingList;
 
-      setProfiles(filtered);
-    } catch (err) {
-      console.error("Error loading swipe profiles:", err);
-      // Fallback directly to mock users with preference filter
-      let myInteresse = 'todos';
-      try {
-        const myUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-        if (myUserDoc.exists()) {
-          myInteresse = myUserDoc.data().profile?.interesse || 'todos';
-        }
-      } catch (e) {
-        console.error("Error fetching my interest in fallback:", e);
+      // Current swiped set
+      const savedSwipes = localStorage.getItem('swiped_user_ids');
+      const currentSwiped = savedSwipes ? new Set<string>(JSON.parse(savedSwipes)) : new Set<string>();
+
+      // Filter out swiped profiles
+      let filtered = effectiveProfiles.filter(u => !currentSwiped.has(u.userId));
+      
+      // If all swiped, reset swiped for seamless experience
+      if (filtered.length === 0 && effectiveProfiles.length > 0) {
+        localStorage.removeItem('swiped_user_ids');
+        setSwipedIds(new Set());
+        filtered = effectiveProfiles;
       }
-      
-      const filteredMocks = MOCK_USERS.filter(u => {
-        if (swipedIds.has(u.userId)) return false;
-        const myInt = myInteresse.toLowerCase();
-        if (myInt === 'todos' || myInt === 'ambos') return true;
-        const targetSexo = u.profile?.sexo?.toLowerCase();
-        if (myInt === 'homens' || myInt === 'masculino') return targetSexo === 'masculino';
-        if (myInt === 'mulheres' || myInt === 'feminino') return targetSexo === 'feminino';
-        return targetSexo === myInt;
-      });
-      setProfiles(filteredMocks);
+
+      filtered.sort((a, b) => (a.distanceValue || 9999) - (b.distanceValue || 9999));
+      const finalProfiles = filtered.length > 0 ? filtered : MOCK_USERS;
+      setProfiles(finalProfiles);
+      setCurrentIndex(prev => (prev >= finalProfiles.length ? 0 : prev));
+    } catch (err) {
+      console.error("Error in fetchSwipeProfiles:", err);
+      setProfiles(MOCK_USERS);
+      setCurrentIndex(prev => (prev >= MOCK_USERS.length ? 0 : prev));
     } finally {
       setLoading(false);
     }
@@ -626,23 +691,32 @@ export default function FlirtSwipe() {
     localStorage.removeItem('swiped_user_ids');
     setCurrentIndex(0);
     setHistory([]);
-    fetchSwipeProfiles();
+    setProfiles([...MOCK_USERS]);
+    fetchSwipeProfiles(auth.currentUser);
   };
 
-  if (loading) {
+  if (profiles.length === 0) {
     return (
-      <div className="h-[calc(100dvh-140px)] flex flex-col items-center justify-center bg-slate-50 text-slate-500 font-medium">
-        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-md mb-3 animate-bounce">
-          <Flame className="w-6 h-6 animate-pulse" />
+      <div className="h-full flex-1 flex flex-col items-center justify-center bg-slate-50 text-slate-500 font-medium p-6">
+        <div className="w-16 h-16 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center mb-4 shadow-inner">
+          <Heart className="w-8 h-8 fill-current animate-pulse" />
         </div>
-        Carregando perfis interessantes...
+        <h3 className="font-extrabold text-slate-800 text-lg">Nenhum perfil encontrado</h3>
+        <p className="text-slate-400 text-xs mt-2 max-w-xs leading-relaxed text-center">
+          Tente recarregar para ver novos perfis disponíveis na sua região.
+        </p>
+        <button 
+          onClick={handleResetSwipes}
+          className="mt-6 px-6 py-3 bg-gradient-to-r from-indigo-600 to-pink-600 hover:opacity-95 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all active:scale-95 flex items-center gap-2"
+        >
+          <RotateCcw className="w-4 h-4" /> Ver Perfis Disponíveis
+        </button>
       </div>
     );
   }
 
-
   return (
-    <div className="h-[calc(100dvh-154px)] flex flex-col justify-between bg-slate-100 font-sans p-4 select-none overflow-hidden relative">
+    <div className="h-full flex-1 flex flex-col justify-between bg-slate-100 font-sans p-3 sm:p-4 select-none overflow-hidden relative">
       
       {/* Immersive Tinder Header */}
       <div className="flex items-center justify-between py-1 px-2 shrink-0">
@@ -658,7 +732,7 @@ export default function FlirtSwipe() {
         <div className="flex items-center gap-2">
           <button 
             onClick={handleResetSwipes}
-            className="p-2 bg-white hover:bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl border border-slate-200/60 shadow-sm transition-all"
+            className="p-2 bg-white hover:bg-slate-50 text-slate-500 hover:text-indigo-600 rounded-xl border border-slate-200/60 shadow-sm transition-all cursor-pointer"
             title="Recomeçar do início"
           >
             <RotateCcw className="w-4 h-4" />
@@ -692,7 +766,7 @@ export default function FlirtSwipe() {
                 <motion.img 
                   key={`${currentProfile.userId}_${currentPhotoIndex}`}
                   src={profilePhotos[currentPhotoIndex] || `https://api.dicebear.com/9.x/notionists/svg?seed=${currentProfile.userId}`} 
-                  alt={currentProfile.profile.nome} 
+                  alt={currentProfile.profile?.nome || 'Perfil'} 
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -734,22 +808,22 @@ export default function FlirtSwipe() {
               <div className="p-5 pb-6 text-white z-20 relative flex flex-col gap-2 pointer-events-auto">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-2xl font-black tracking-tight drop-shadow-md">
-                    {currentProfile.profile.nome || currentProfile.profile.apelido}, {currentProfile.profile.idade}
+                    {currentProfile.profile?.nome || currentProfile.profile?.apelido || 'Usuário'}, {currentProfile.profile?.idade || 25}
                   </h3>
                   <ZodiacBadge user={currentProfile} variant="pill" />
-                  {(currentProfile.idVerified || currentProfile.profile.verified) && (
+                  {(currentProfile.idVerified || currentProfile.profile?.verified) && (
                     <CheckCircle className="w-5 h-5 text-sky-400 fill-white shrink-0 shadow-sm" aria-label="Perfil verificado com IA" />
                   )}
-                  {currentProfile.profile.facialVerified && (
+                  {currentProfile.profile?.facialVerified && (
                     <ShieldCheck className="w-5 h-5 text-emerald-400 fill-white shrink-0 shadow-sm" aria-label="Identidade facial certificada" />
                   )}
                 </div>
 
                 {/* Location Demonym Title Display */}
-                {currentProfile.profile.estadoNascimento && (
+                {currentProfile.profile?.estadoNascimento && (
                   <p className="text-[11px] font-black uppercase tracking-widest text-slate-300 drop-shadow flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    {getDemonym(currentProfile.profile.estadoNascimento, currentProfile.profile.sexo)} • {currentProfile.distance}
+                    {getDemonym(currentProfile.profile.estadoNascimento, currentProfile.profile.sexo || '')} • {currentProfile.distance}
                   </p>
                 )}
 
@@ -757,12 +831,12 @@ export default function FlirtSwipe() {
                 <div className="mt-1 self-start bg-black/60 backdrop-blur-md border border-white/10 rounded-full px-3.5 py-1.5 flex items-center gap-2 shadow-inner">
                   <span className="text-xs">😍</span>
                   <span className="text-[11px] font-extrabold text-white tracking-tight leading-none">
-                    {getObjectiveLabel(currentProfile.profile.objetivo) || OBJECTIVES[Math.floor(currentProfile.profile.idade % OBJECTIVES.length)]}
+                    {getObjectiveLabel(currentProfile.profile?.objetivo || '') || OBJECTIVES[Math.floor(Number(currentProfile.profile?.idade || 25) % OBJECTIVES.length)]}
                   </span>
                 </div>
 
                 {/* User Bio */}
-                {currentProfile.profile.bio && (
+                {currentProfile.profile?.bio && (
                   <p className="text-xs text-slate-200 mt-2 line-clamp-2 leading-relaxed drop-shadow-sm font-medium">
                     "{currentProfile.profile.bio}"
                   </p>

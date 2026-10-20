@@ -16,15 +16,16 @@ import Login from './pages/Login';
 import VerifyEmail from './pages/VerifyEmail';
 import Onboarding from './pages/Onboarding';
 
-// Lazy loaded pages for optimal speed and smaller initial chunk size
-const Discover = lazy(() => import('./pages/Discover'));
+import Discover from './pages/Discover';
+import FlirtSwipe from './pages/FlirtSwipe';
+
+// Lazy loaded secondary pages for optimal speed and smaller bundle size
 const ProfileDetails = lazy(() => import('./pages/ProfileDetails'));
 const ChatList = lazy(() => import('./pages/ChatList'));
 const ChatRoom = lazy(() => import('./pages/ChatRoom'));
 const Friends = lazy(() => import('./pages/Friends'));
 const QuickMessages = lazy(() => import('./pages/QuickMessages'));
 const AdminCRM = lazy(() => import('./pages/AdminCRM'));
-const FlirtSwipe = lazy(() => import('./pages/FlirtSwipe'));
 const RecentActivities = lazy(() => import('./pages/RecentActivities'));
 const EmergencyAlertView = lazy(() => import('./pages/EmergencyAlertView'));
 
@@ -864,33 +865,40 @@ function AuthenticatedLayout({
 
   // 7. Render fully authenticated layout & app shell with outlet
   return (
-    <div id="app-container" className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 mx-auto max-w-md w-full relative shadow-2xl overflow-hidden border-x border-slate-200 dark:border-slate-800">
-      <Header onStartTour={() => {
-        sessionStorage.removeItem('tour_current_step');
-        setShowTour(true);
-      }} />
+    <div id="app-container" className="flex flex-col h-[100dvh] max-h-[100dvh] bg-slate-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 mx-auto max-w-md w-full relative shadow-2xl overflow-hidden border-x border-slate-200 dark:border-slate-800">
+      {/* Top Header Section - Fixed */}
+      <header className="shrink-0 z-40 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 w-full shadow-sm">
+        <Header onStartTour={() => {
+          sessionStorage.removeItem('tour_current_step');
+          setShowTour(true);
+        }} />
 
-      {/* 30-Day Free Trial & Annual Subscription Banner */}
-      <TrialStatusBanner
-        evaluation={userSubscriptionEval}
-        onOpenUpgradeModal={() => setShowPaywallModal(true)}
-      />
-      
-      {/* Global Alert Banner */}
-      {appConfig?.globalBannerText && (
-        <div className="bg-amber-500 text-white px-4 py-2 text-xs font-bold flex items-center gap-2 text-center justify-center border-b border-amber-600 shrink-0">
-          <span className="shrink-0">📢</span>
-          <span className="truncate">{appConfig.globalBannerText}</span>
-        </div>
-      )}
+        {/* 30-Day Free Trial & Annual Subscription Banner */}
+        <TrialStatusBanner
+          evaluation={userSubscriptionEval}
+          onOpenUpgradeModal={() => setShowPaywallModal(true)}
+        />
+        
+        {/* Global Alert Banner */}
+        {appConfig?.globalBannerText && (
+          <div className="bg-amber-500 text-white px-4 py-2 text-xs font-bold flex items-center gap-2 text-center justify-center border-b border-amber-600 shrink-0">
+            <span className="shrink-0">📢</span>
+            <span className="truncate">{appConfig.globalBannerText}</span>
+          </div>
+        )}
+      </header>
 
-      <main className="flex-1 overflow-y-auto pb-[92px]">
+      {/* Middle Scrollable Section - Only this part scrolls */}
+      <main className="flex-1 overflow-y-auto overscroll-contain min-h-0 relative flex flex-col">
         <ErrorBoundary>
           <Outlet />
         </ErrorBoundary>
       </main>
       
-      <Navigation />
+      {/* Bottom Footer Section - Fixed */}
+      <footer className="shrink-0 z-50 w-full">
+        <Navigation />
+      </footer>
 
       {/* PWA In-App Install Suggestion Banner */}
       <PWAInstallBanner />

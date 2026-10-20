@@ -532,7 +532,7 @@ export default function Discover({ onInitialLoadStart, onInitialLoadEnd }: { onI
 
   return (
     <div className="flex flex-col font-sans">
-      <div className="bg-white dark:bg-slate-900 p-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 p-4 border-b border-slate-200 dark:border-slate-800">
         {currentUserNickname && (
           <div className="mb-4 flex items-center justify-between">
             <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
