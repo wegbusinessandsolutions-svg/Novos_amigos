@@ -9,7 +9,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db, handleFirestoreError, OperationType, perf } from './lib/firebase';
 import { doc, getDoc, onSnapshot, setDoc, collection, addDoc } from 'firebase/firestore';
 import { trace } from 'firebase/performance';
-import { Shield, Moon, RefreshCw } from 'lucide-react';
+import { Shield, Moon, RefreshCw, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import Login from './pages/Login';
@@ -640,12 +640,17 @@ export default function App() {
     userRole === 'CEO'
   );
 
+  const handleConnectionComplete = useCallback(() => {
+    setShowConnectionAnim(false);
+    sessionStorage.removeItem('just_logged_in');
+  }, []);
+
+  if (showConnectionAnim) {
+    return <ConnectionAnimation onComplete={handleConnectionComplete} />;
+  }
+
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-400 dark:text-slate-500 font-medium">
-        Carregando...
-      </div>
-    );
+    return <AppInitialLoadingScreen />;
   }
 
   return (
@@ -675,6 +680,55 @@ export default function App() {
         setShowPaywallModal={setShowPaywallModal}
       />
     </HashRouter>
+  );
+}
+
+function AppInitialLoadingScreen() {
+  const [initialProgress, setInitialProgress] = useState(15);
+
+  useEffect(() => {
+    const startTime = Date.now();
+    const duration = 2400; // 2.4 seconds
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(95, 15 + (elapsed / duration) * 80);
+      setInitialProgress(pct);
+    }, 30);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 px-6 font-sans text-center select-none">
+      <div className="w-16 h-16 bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 rounded-3xl flex items-center justify-center shadow-xl shadow-indigo-500/25 mb-6 animate-pulse">
+        <Sparkles className="w-8 h-8 text-white" />
+      </div>
+      <h2 className="text-xl font-black text-slate-800 dark:text-white tracking-tight mb-1">
+        New Friends<span className="text-indigo-600 dark:text-indigo-400">.br</span>
+      </h2>
+      <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 font-semibold">
+        Carregando o aplicativo...
+      </p>
+
+      {/* Progress Bar Container */}
+      <div className="w-56 sm:w-64 rounded-full h-3 p-[2px] overflow-hidden bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 shadow-inner">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-[width] duration-75 ease-out relative overflow-hidden"
+          style={{ width: `${Math.min(100, Math.max(5, initialProgress))}%` }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent animate-shimmer" />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 mt-3 select-none">
+        <span className="text-xs font-black tracking-wider text-indigo-600 dark:text-indigo-400">
+          {Math.min(100, Math.round(initialProgress))}%
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          Carregando...
+        </span>
+      </div>
+    </div>
   );
 }
 

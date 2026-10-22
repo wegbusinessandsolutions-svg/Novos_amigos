@@ -646,7 +646,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
             </select>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 ml-1">Bebidas</label>
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 ml-1">Bebida Alcoólica</label>
             <select required value={formData.bebidas} onChange={e => setFormData({...formData, bebidas: e.target.value})} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-slate-900 appearance-none">
               <option value="" disabled>Selecione</option>
               <option value="socialmente">Socialmente</option>
@@ -706,7 +706,7 @@ export default function Onboarding({ onComplete }: { onComplete: () => void }) {
             </div>
           )}
           <button disabled={loading} type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl py-4 shadow-lg shadow-indigo-200 active:scale-[0.98] disabled:opacity-50 transition-all flex items-center justify-center gap-2">
-            {loading ? 'Salvando...' : 'Cadastrar Agora'}
+            {loading ? 'Salvando...' : 'Fazer Cadastro'}
             {!loading && (
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, User, Heart, Share2, Compass, CheckCircle2 } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
@@ -27,23 +27,29 @@ const AVATARS = [
 ];
 
 export default function ConnectionAnimation({ onComplete }: ConnectionAnimationProps) {
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [isLightTheme, setIsLightTheme] = useState(false);
+
+  // Stable reference to onComplete prevents interval/timer tear-down when parent re-renders
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     const now = new Date();
     const hours = now.getHours();
     const minutes = now.getMinutes();
     const timeInMinutes = hours * 60 + minutes;
-    // 06:01 is 361 minutes, 17:59 is 1079 minutes
     const light = timeInMinutes >= 361 && timeInMinutes <= 1079;
     setIsLightTheme(light);
   }, []);
 
   // Fetch the current user's profile photo dynamically
   useEffect(() => {
+    let isCancelled = false;
+
     const fetchUserPhoto = async () => {
       if (!auth.currentUser) return;
       
@@ -52,7 +58,7 @@ export default function ConnectionAnimation({ onComplete }: ConnectionAnimationP
         const cached = localStorage.getItem(`user_profile_cache_${auth.currentUser.uid}`);
         if (cached) {
           const cachedData = JSON.parse(cached);
-          if (cachedData?.profile?.fotoPrincipalUrl) {
+          if (cachedData?.profile?.fotoPrincipalUrl && !isCancelled) {
             setPhotoUrl(cachedData.profile.fotoPrincipalUrl);
           }
         }
@@ -63,6 +69,7 @@ export default function ConnectionAnimation({ onComplete }: ConnectionAnimationP
       // Fetch from Firestore
       try {
         const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (isCancelled) return;
         if (userDoc.exists()) {
           const uData = userDoc.data();
           if (uData?.profile?.fotoPrincipalUrl) {
@@ -79,48 +86,59 @@ export default function ConnectionAnimation({ onComplete }: ConnectionAnimationP
     };
 
     fetchUserPhoto();
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
-  // Cycle steps in sequence
+  // Smooth, continuous progress animation that actively advances from 0% to 100%
   useEffect(() => {
-    const stepDuration = 800; // 800ms per step
+    const startTime = Date.now();
+    const TOTAL_DURATION_MS = 3400; // 3.4 seconds total animation duration
+    let isFinished = false;
+
     const interval = setInterval(() => {
-      setCurrentStepIndex((prev) => {
-        if (prev < STEPS.length - 1) {
-          return prev + 1;
-        } else {
-          clearInterval(interval);
-          return prev;
-        }
-      });
-    }, stepDuration);
+      const elapsed = Date.now() - startTime;
+      const currentPct = Math.min(100, (elapsed / TOTAL_DURATION_MS) * 100);
 
-    return () => clearInterval(interval);
+      setProgress(currentPct);
+
+      if (currentPct >= 100 && !isFinished) {
+        isFinished = true;
+        clearInterval(interval);
+        // Brief pause at 100% for a polished completion feeling
+        setTimeout(() => {
+          if (onCompleteRef.current) {
+            onCompleteRef.current();
+          }
+        }, 350);
+      }
+    }, 25); // 40 FPS high-resolution updates
+
+    // Safety fallback timeout to ensure user never gets blocked
+    const fallbackTimeout = setTimeout(() => {
+      if (!isFinished) {
+        isFinished = true;
+        clearInterval(interval);
+        setProgress(100);
+        if (onCompleteRef.current) {
+          onCompleteRef.current();
+        }
+      }
+    }, TOTAL_DURATION_MS + 1200);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(fallbackTimeout);
+    };
   }, []);
 
-  // Smoothly increment the progress bar to 100% over 4.2 seconds
-  useEffect(() => {
-    const totalDuration = 4000; // 4 seconds total
-    const intervalTime = 40;
-    const increment = 100 / (totalDuration / intervalTime);
-
-    const timer = setInterval(() => {
-      setProgress((prev) => {
-        const next = prev + increment;
-        if (next >= 100) {
-          clearInterval(timer);
-          // Brief extra delay for a satisfying finish animation before firing completion
-          setTimeout(() => {
-            onComplete();
-          }, 300);
-          return 100;
-        }
-        return next;
-      });
-    }, intervalTime);
-
-    return () => clearInterval(timer);
-  }, [onComplete]);
+  // Synchronize step index directly with progress percentage
+  const currentStepIndex = 
+    progress < 22 ? 0 :
+    progress < 46 ? 1 :
+    progress < 70 ? 2 :
+    progress < 92 ? 3 : 4;
 
   const CurrentIcon = STEPS[currentStepIndex].icon;
   const lineStroke = isLightTheme ? "rgba(99, 102, 241, 0.08)" : "rgba(99, 102, 241, 0.15)";
@@ -331,16 +349,25 @@ export default function ConnectionAnimation({ onComplete }: ConnectionAnimationP
         </div>
 
         {/* Progress Bar Container */}
-        <div className={`w-48 rounded-full h-2.5 p-[2px] overflow-hidden transition-all duration-500 border ${isLightTheme ? 'bg-slate-50 border-slate-200/60' : 'bg-slate-900/80 border-slate-800'}`}>
-          <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"
-            style={{ width: `${progress}%` }}
-          />
+        <div className={`w-56 sm:w-64 rounded-full h-3 p-[2px] overflow-hidden transition-all duration-300 border shadow-inner ${isLightTheme ? 'bg-slate-100 border-slate-300/80 shadow-slate-200' : 'bg-slate-900 border-slate-700/80 shadow-black'}`}>
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-[width] duration-75 ease-out relative overflow-hidden shadow-sm"
+            style={{ width: `${Math.min(100, Math.max(2, progress))}%` }}
+          >
+            {/* Shimmer light sweep */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent animate-shimmer" />
+          </div>
         </div>
 
-        <span className={`text-[10px] font-bold uppercase tracking-widest mt-2.5 select-none transition-colors duration-500 ${isLightTheme ? 'text-slate-400' : 'text-slate-500'}`}>
-          {Math.round(progress)}% Concluído
-        </span>
+        {/* Dynamic Percentage Text */}
+        <div className="flex items-center gap-1.5 mt-3 select-none">
+          <span className={`text-xs font-black tracking-wider transition-colors duration-300 ${isLightTheme ? 'text-indigo-600' : 'text-indigo-400'}`}>
+            {Math.min(100, Math.round(progress))}%
+          </span>
+          <span className={`text-[10px] font-bold uppercase tracking-widest transition-colors duration-300 ${isLightTheme ? 'text-slate-500' : 'text-slate-400'}`}>
+            {progress >= 100 ? 'Concluído!' : 'Carregando Aplicativo...'}
+          </span>
+        </div>
       </div>
     </div>
   );

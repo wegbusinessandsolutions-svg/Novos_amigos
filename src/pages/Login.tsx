@@ -493,7 +493,7 @@ export default function Login() {
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 px-4 rounded-xl font-bold shadow-lg shadow-indigo-200 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
             >
-              {loading ? 'Carregando...' : (isRegister ? 'Cadastrar Agora' : 'Entrar')}
+              {loading ? 'Carregando...' : (isRegister ? 'Fazer Cadastro' : 'Entrar')}
               {!loading && isRegister && (
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
@@ -522,7 +522,7 @@ export default function Login() {
               onClick={() => setIsRegister(!isRegister)}
               className="text-indigo-600 font-bold ml-1 hover:underline"
             >
-              {isRegister ? 'Entrar' : 'Cadastrar'}
+              {isRegister ? 'Entrar' : 'Fazer Cadastro'}
             </button>
           </p>
         </div>

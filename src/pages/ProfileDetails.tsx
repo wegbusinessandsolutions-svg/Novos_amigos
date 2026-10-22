@@ -764,10 +764,13 @@ export default function ProfileDetails() {
         : hobbiesList[seedNum % hobbiesList.length];
 
     const lifestyle = Array.isArray(safeBase.lifestyle) && safeBase.lifestyle.length > 0
-      ? safeBase.lifestyle
+      ? safeBase.lifestyle.map((l: any) => ({
+          ...l,
+          label: (l.label === "Bebidas" || l.label === "Êxodo" || l.label === "Exodo") ? "Bebida Alcoólica" : l.label
+        }))
       : [
           { label: "Esportes", value: seedNum % 2 === 0 ? "Frequente" : "Às vezes" },
-          { label: "Bebidas", value: seedNum % 3 === 0 ? "Socialmente" : "Não bebo" },
+          { label: "Bebida Alcoólica", value: seedNum % 3 === 0 ? "Socialmente" : "Não bebo" },
           { label: "Fumante", value: "Não" },
           { label: "Pet Favorito", value: "Ama pets 🐾" }
         ];
@@ -1131,10 +1134,17 @@ export default function ProfileDetails() {
       if (initialLifestyle.length === 0) {
         initialLifestyle = [
           { label: "Esportes", value: "Às vezes" },
-          { label: "Bebidas", value: "Socialmente" },
+          { label: "Bebida Alcoólica", value: "Socialmente" },
           { label: "Fumante", value: "Não" },
           { label: "Pet Favorito", value: "Ama pets 🐾" }
         ];
+      } else {
+        initialLifestyle = initialLifestyle.map((item: any) => ({
+          ...item,
+          label: (item.label === "Bebidas" || item.label === "Êxodo" || item.label === "Exodo") 
+            ? "Bebida Alcoólica" 
+            : item.label
+        }));
       }
       setEditLifestyle(initialLifestyle);
     }
@@ -2471,13 +2481,19 @@ export default function ProfileDetails() {
 
       {/* 1.5. Interações Rápidas (Flertar, Mensagem Curta, Adicionar como amigo) */}
       {isOwnProfile ? (
-        <div className="bg-white border-b border-slate-100 py-4 px-6 flex justify-center items-center shadow-sm">
+        <div className="bg-white border-b border-slate-100 py-4 px-6 flex flex-col sm:flex-row justify-center items-center gap-2.5 shadow-sm">
           <button 
             id="tour-edit-profile"
             onClick={() => setEditModalOpen(true)}
-            className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+            className="w-full flex-1 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold text-sm py-3.5 rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
           >
             <Sparkles className="w-5 h-5 text-white" /> Editar Meu Perfil
+          </button>
+          <button 
+            onClick={() => setEditModalOpen(true)}
+            className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs py-3.5 px-6 rounded-xl shadow-md shadow-emerald-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer shrink-0"
+          >
+            <Check className="w-4 h-4 stroke-[3]" /> Salvar Alterações
           </button>
         </div>
       ) : profile?.statusBolinha === 'indisponivel' && false ? (
@@ -3433,12 +3449,17 @@ export default function ProfileDetails() {
           <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm space-y-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Estilo de Vida</h3>
             <div className="grid grid-cols-2 gap-3">
-              {profile.lifestyle.map((life: any, i: number) => (
-                <div key={i} className="bg-slate-50/50 rounded-xl p-3.5 border border-slate-100 flex flex-col justify-center transition-colors hover:bg-slate-50">
-                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">{life.label}</span>
-                  <span className="text-sm font-extrabold text-slate-700 mt-1 text-left">{life.value}</span>
-                </div>
-              ))}
+              {profile.lifestyle.map((life: any, i: number) => {
+                const label = (life.label === "Bebidas" || life.label === "Êxodo" || life.label === "Exodo") 
+                  ? "Bebida Alcoólica" 
+                  : life.label;
+                return (
+                  <div key={i} className="bg-slate-50/50 rounded-xl p-3.5 border border-slate-100 flex flex-col justify-center transition-colors hover:bg-slate-50">
+                    <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">{label}</span>
+                    <span className="text-sm font-extrabold text-slate-700 mt-1 text-left">{life.value}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -4504,17 +4525,32 @@ export default function ProfileDetails() {
                 </div>
               )}
 
-              <div className="p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Editar Meu Perfil</h3>
                   <p className="text-[11px] text-slate-400 font-medium">Altere seus dados pessoais e de disponibilidade</p>
                 </div>
-                <button 
-                  onClick={() => setEditModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors active:scale-90 font-bold"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    onClick={handleSaveProfile}
+                    disabled={isSavingProfile || isUploadingImage}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
+                  >
+                    {isSavingProfile || isUploadingImage ? (
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    )}
+                    <span>Salvar Alterações</span>
+                  </button>
+                  <button 
+                    onClick={() => setEditModalOpen(false)}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors active:scale-90 font-bold"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               <form onSubmit={handleSaveProfile} className="p-5 space-y-4">
@@ -5074,10 +5110,13 @@ export default function ProfileDetails() {
                   <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Estilo de Vida</label>
                   <div className="grid grid-cols-2 gap-3">
                     {editLifestyle.map((life, idx) => {
+                      const displayLabel = (life.label === "Bebidas" || life.label === "Êxodo" || life.label === "Exodo" || life.label === "Bebida Alcoólica") 
+                        ? "Bebida Alcoólica" 
+                        : life.label;
                       let options = ["Não", "Sim", "Às vezes", "Socialmente"];
                       if (life.label === "Esportes") {
                         options = ["Frequente", "Às vezes", "Não pratico", "Gosto de caminhada"];
-                      } else if (life.label === "Bebidas") {
+                      } else if (displayLabel === "Bebida Alcoólica" || life.label === "Bebidas" || life.label === "Êxodo" || life.label === "Exodo") {
                         options = ["Socialmente", "Não bebo", "Frequente", "Raramente"];
                       } else if (life.label === "Fumante") {
                         options = ["Não", "Sim", "Socialmente", "Tentando parar"];
@@ -5087,12 +5126,12 @@ export default function ProfileDetails() {
 
                       return (
                         <div key={idx} className="space-y-1">
-                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{life.label}</span>
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">{displayLabel}</span>
                           <select
                             value={life.value}
                             onChange={e => {
                               const val = e.target.value;
-                              setEditLifestyle(prev => prev.map((item, i) => i === idx ? { ...item, value: val } : item));
+                              setEditLifestyle(prev => prev.map((item, i) => i === idx ? { ...item, label: displayLabel, value: val } : item));
                             }}
                             className="w-full text-xs font-semibold p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none"
                           >
@@ -5212,6 +5251,35 @@ export default function ProfileDetails() {
                   )}
                 </button>
               </form>
+
+              {/* Sticky Bottom Save Action Bar */}
+              <div className="sticky bottom-0 bg-white/95 backdrop-blur-md p-4 border-t border-slate-100 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] z-20 flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={isSavingProfile || isUploadingImage}
+                  className="flex-1 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50 text-white font-extrabold text-sm py-3 px-4 rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                >
+                  {isSavingProfile || isUploadingImage ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>{isUploadingImage ? 'Enviando Imagem...' : 'Salvando...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 stroke-[3]" />
+                      <span>Salvar Alterações</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
