@@ -27,7 +27,7 @@ const AVATARS = [
 ];
 
 export default function ConnectionAnimation({ onComplete }: ConnectionAnimationProps) {
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState(3);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [isLightTheme, setIsLightTheme] = useState(false);
 
@@ -91,44 +91,71 @@ export default function ConnectionAnimation({ onComplete }: ConnectionAnimationP
     };
   }, []);
 
-  // Smooth, continuous progress animation that actively advances from 0% to 100%
+  // Smooth, high-performance continuous progress animation that actively advances from 3% to 100%
   useEffect(() => {
-    const startTime = Date.now();
-    const TOTAL_DURATION_MS = 3400; // 3.4 seconds total animation duration
+    let animId: number;
+    let timerId: any;
+    const startTime = performance.now();
+    const TOTAL_DURATION_MS = 3200; // 3.2 seconds total animation duration
     let isFinished = false;
 
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const currentPct = Math.min(100, (elapsed / TOTAL_DURATION_MS) * 100);
+    const updateProgress = (now: number) => {
+      const elapsed = now - startTime;
+      const currentPct = Math.min(100, Math.max(3, (elapsed / TOTAL_DURATION_MS) * 100));
+
+      setProgress(currentPct);
+
+      if (currentPct < 100) {
+        animId = requestAnimationFrame(updateProgress);
+      } else if (!isFinished) {
+        isFinished = true;
+        setTimeout(() => {
+          if (onCompleteRef.current) {
+            onCompleteRef.current();
+          }
+        }, 300);
+      }
+    };
+
+    // Immediate first tick on paint
+    animId = requestAnimationFrame(updateProgress);
+
+    // Fallback timer ticks even if animation frames are throttled by iframe or tab sleep
+    timerId = setInterval(() => {
+      const now = performance.now();
+      const elapsed = now - startTime;
+      const currentPct = Math.min(100, Math.max(3, (elapsed / TOTAL_DURATION_MS) * 100));
 
       setProgress(currentPct);
 
       if (currentPct >= 100 && !isFinished) {
         isFinished = true;
-        clearInterval(interval);
-        // Brief pause at 100% for a polished completion feeling
+        clearInterval(timerId);
+        cancelAnimationFrame(animId);
         setTimeout(() => {
           if (onCompleteRef.current) {
             onCompleteRef.current();
           }
-        }, 350);
+        }, 300);
       }
-    }, 25); // 40 FPS high-resolution updates
+    }, 40);
 
     // Safety fallback timeout to ensure user never gets blocked
     const fallbackTimeout = setTimeout(() => {
       if (!isFinished) {
         isFinished = true;
-        clearInterval(interval);
+        clearInterval(timerId);
+        cancelAnimationFrame(animId);
         setProgress(100);
         if (onCompleteRef.current) {
           onCompleteRef.current();
         }
       }
-    }, TOTAL_DURATION_MS + 1200);
+    }, TOTAL_DURATION_MS + 1000);
 
     return () => {
-      clearInterval(interval);
+      cancelAnimationFrame(animId);
+      clearInterval(timerId);
       clearTimeout(fallbackTimeout);
     };
   }, []);

@@ -50,7 +50,8 @@ export default function Login() {
 
   const handleRequestFaceLogin = async () => {
     setError('');
-    if (!email.trim()) {
+    const rawInput = email.trim();
+    if (!rawInput) {
       setError('Por favor, informe seu e-mail cadastrado para solicitar o login com reconhecimento facial.');
       return;
     }
@@ -60,12 +61,13 @@ export default function Login() {
       const { collection, query, where, getDocs } = await import('firebase/firestore');
       const { db } = await import('../lib/firebase');
 
-      const trimmedEmail = email.trim().toLowerCase();
+      const resolvedEmail = (rawInput.toLowerCase() === 'admin') ? 'ceo@wegbusiness.com' : rawInput;
+      const trimmedEmail = resolvedEmail.toLowerCase();
       const q = query(collection(db, 'users'), where('email', '==', trimmedEmail));
       let snap = await getDocs(q);
 
-      if (snap.empty && trimmedEmail !== email.trim()) {
-        const qOriginal = query(collection(db, 'users'), where('email', '==', email.trim()));
+      if (snap.empty && trimmedEmail !== rawInput.toLowerCase()) {
+        const qOriginal = query(collection(db, 'users'), where('email', '==', rawInput.toLowerCase()));
         snap = await getDocs(qOriginal);
       }
 
@@ -105,7 +107,12 @@ export default function Login() {
       throw new Error('Senha não fornecida.');
     }
     sessionStorage.setItem('just_logged_in', 'true');
-    await signInWithEmailAndPassword(auth, email.trim(), linkedPassword);
+    const rawInput = email.trim();
+    const resolvedEmail = (rawInput.toLowerCase() === 'admin') ? 'ceo@wegbusiness.com' : rawInput;
+    const cred = await signInWithEmailAndPassword(auth, resolvedEmail, linkedPassword);
+    if (cred.user) {
+      sessionStorage.setItem(`face_verified_${cred.user.uid}`, 'true');
+    }
     setIsFaceModalOpen(false);
   };
 
@@ -482,10 +489,10 @@ export default function Login() {
               type="button"
               disabled={loading}
               onClick={handleRequestFaceLogin}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white py-3.5 px-4 rounded-xl font-bold shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 px-4 rounded-xl font-bold shadow-lg shadow-indigo-200 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
             >
               <Camera className="w-4 h-4 text-white" />
-              <span>{loading ? 'Consultando Cadastro...' : 'Solicitar Login (Apresentar Rosto)'}</span>
+              <span>{loading ? 'Consultando Cadastro...' : 'Entrar'}</span>
             </button>
           ) : (
             <button 
@@ -493,8 +500,8 @@ export default function Login() {
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 px-4 rounded-xl font-bold shadow-lg shadow-indigo-200 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
             >
-              {loading ? 'Carregando...' : (isRegister ? 'Fazer Cadastro' : 'Entrar')}
-              {!loading && isRegister && (
+              {loading ? 'Carregando...' : 'Entrar'}
+              {!loading && (
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>

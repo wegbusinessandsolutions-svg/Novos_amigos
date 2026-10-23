@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, ShieldCheck, AlertCircle, CheckCircle2, X, RefreshCw, Lock, Sparkles, Upload } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { setSecureItem, getSecureItem } from '../utils/secureStorage';
 
 interface FaceLoginModalProps {
@@ -39,6 +38,13 @@ export default function FaceLoginModal({
     try {
       setCameraError(null);
       isCameraActiveRef.current = true;
+
+      if (!navigator?.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn("Camera API (getUserMedia) not available in this context.");
+        setCameraError('Câmera não suportada ou indisponível neste navegador. Você pode enviar uma foto do rosto ou entrar com sua senha.');
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 640 },
@@ -53,19 +59,9 @@ export default function FaceLoginModal({
       }
 
       setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        try {
-          await videoRef.current.play();
-        } catch (playErr) {
-          if (playErr instanceof Error && playErr.name !== 'AbortError') {
-            console.warn('Erro ao reproduzir vídeo:', playErr);
-          }
-        }
-      }
     } catch (err: any) {
       console.warn('Erro de acesso à câmera no login facial:', err);
-      setCameraError('Não foi possível acessar a câmera. Verifique as permissões do seu navegador.');
+      setCameraError('Acesso à câmera bloqueado ou recusado. Você pode enviar uma foto do rosto ou entrar com sua senha.');
     }
   };
 
@@ -75,7 +71,22 @@ export default function FaceLoginModal({
       cameraStream.getTracks().forEach((track) => track.stop());
       setCameraStream(null);
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
   };
+
+  // Safely link stream to video element whenever both are ready
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch((playErr) => {
+        if (playErr.name !== 'AbortError') {
+          console.warn('Erro ao reproduzir vídeo no modal:', playErr);
+        }
+      });
+    }
+  }, [cameraStream, step]);
 
   useEffect(() => {
     if (isOpen) {

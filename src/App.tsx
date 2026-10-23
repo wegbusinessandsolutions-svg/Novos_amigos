@@ -645,41 +645,42 @@ export default function App() {
     sessionStorage.removeItem('just_logged_in');
   }, []);
 
-  if (showConnectionAnim) {
-    return <ConnectionAnimation onComplete={handleConnectionComplete} />;
-  }
-
-  if (loading) {
+  if (loading && !user && !showConnectionAnim) {
     return <AppInitialLoadingScreen />;
   }
 
   return (
-    <HashRouter>
-      <AnimatedRoutes
-        user={user}
-        setUser={setUser}
-        isAdmin={isAdmin}
-        appConfig={appConfig}
-        userDocVerified={userDocVerified}
-        faceVerificationRequired={faceVerificationRequired}
-        setFaceVerificationRequired={setFaceVerificationRequired}
-        isStandby={isStandby}
-        hasProfile={hasProfile}
-        setHasProfile={setHasProfile}
-        showTour={showTour}
-        setShowTour={setShowTour}
-        showConnectionAnim={showConnectionAnim}
-        setShowConnectionAnim={setShowConnectionAnim}
-        handleDiscoverStart={handleDiscoverStart}
-        handleDiscoverEnd={handleDiscoverEnd}
-        handleChatsStart={handleChatsStart}
-        handleChatsEnd={handleChatsEnd}
-        userDocData={userDocData}
-        userSubscriptionEval={userSubscriptionEval}
-        showPaywallModal={showPaywallModal}
-        setShowPaywallModal={setShowPaywallModal}
-      />
-    </HashRouter>
+    <>
+      <HashRouter>
+        <AnimatedRoutes
+          user={user}
+          setUser={setUser}
+          isAdmin={isAdmin}
+          appConfig={appConfig}
+          userDocVerified={userDocVerified}
+          faceVerificationRequired={faceVerificationRequired}
+          setFaceVerificationRequired={setFaceVerificationRequired}
+          isStandby={isStandby}
+          hasProfile={hasProfile}
+          setHasProfile={setHasProfile}
+          showTour={showTour}
+          setShowTour={setShowTour}
+          showConnectionAnim={showConnectionAnim}
+          setShowConnectionAnim={setShowConnectionAnim}
+          handleDiscoverStart={handleDiscoverStart}
+          handleDiscoverEnd={handleDiscoverEnd}
+          handleChatsStart={handleChatsStart}
+          handleChatsEnd={handleChatsEnd}
+          userDocData={userDocData}
+          userSubscriptionEval={userSubscriptionEval}
+          showPaywallModal={showPaywallModal}
+          setShowPaywallModal={setShowPaywallModal}
+        />
+      </HashRouter>
+      {showConnectionAnim && (
+        <ConnectionAnimation onComplete={handleConnectionComplete} />
+      )}
+    </>
   );
 }
 
@@ -745,6 +746,63 @@ function PageTransition({ children }: { children: React.ReactNode }) {
   );
 }
 
+function StandbyScreen({ user }: { user: User }) {
+  const [feedback, setFeedback] = useState<{ text: string; error?: boolean } | null>(null);
+  const [isReactivating, setIsReactivating] = useState(false);
+
+  const handleReactivate = async () => {
+    setIsReactivating(true);
+    setFeedback(null);
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'users', user.uid), {
+        'status.ativo': true
+      });
+      setFeedback({ text: 'Sua conta foi reativada com sucesso! Bem-vindo(a) de volta! 😊' });
+    } catch (e: any) {
+      console.error(e);
+      setFeedback({ text: 'Erro ao reativar conta. Por favor, tente novamente.', error: true });
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 px-6 font-sans text-center relative max-w-md w-full mx-auto border-x border-slate-200 dark:border-slate-800 shadow-2xl">
+      <div className="w-16 h-16 bg-amber-100 dark:bg-amber-950/40 rounded-3xl flex items-center justify-center shadow-md mb-6 border border-amber-200/30">
+        <Moon className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+      </div>
+      <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-2">Modo StandBy Ativo</h1>
+      <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-6 font-medium">
+        Sua conta está adormecida no modo StandBy. Seus dados e conexões permanecem salvos com segurança, mas seu perfil está invisível para os outros usuários.
+      </p>
+
+      {feedback && (
+        <div className={`w-full mb-4 p-3 rounded-xl text-xs font-bold ${feedback.error ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+          {feedback.text}
+        </div>
+      )}
+
+      <div className="space-y-3 w-full px-4">
+        <button
+          onClick={handleReactivate}
+          disabled={isReactivating}
+          className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl text-sm transition-all shadow-lg active:scale-95 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          <RefreshCw className={`w-4 h-4 ${isReactivating ? 'animate-spin' : ''}`} />
+          <span>{isReactivating ? 'Reativando...' : 'Reativar Minha Conta'}</span>
+        </button>
+        <button
+          onClick={() => auth.signOut()}
+          className="w-full py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-850 text-slate-600 dark:text-slate-350 rounded-xl text-xs font-bold transition-all border border-slate-200/40 dark:border-slate-800/40 cursor-pointer"
+        >
+          Sair da Conta
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface AuthenticatedLayoutProps {
   user: User | null;
   setUser: (user: User | null) => void;
@@ -789,10 +847,10 @@ function AuthenticatedLayout({
   // 1. Unauthenticated state
   if (!user) {
     return (
-      <>
+      <ErrorBoundary>
         <Login />
         <PWAInstallBanner />
-      </>
+      </ErrorBoundary>
     );
   }
 
@@ -836,43 +894,7 @@ function AuthenticatedLayout({
 
   // 4. Standby check block
   if (isStandby) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-950 px-6 font-sans text-center relative max-w-md w-full mx-auto border-x border-slate-200 dark:border-slate-800 shadow-2xl">
-        <div className="w-16 h-16 bg-amber-100 dark:bg-amber-950/40 rounded-3xl flex items-center justify-center shadow-md mb-6 border border-amber-200/30">
-          <Moon className="w-8 h-8 text-amber-600 dark:text-amber-400" />
-        </div>
-        <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-2">Modo StandBy Ativo</h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-8 font-medium">
-          Sua conta está adormecida no modo StandBy. Seus dados e conexões permanecem salvos com segurança, mas seu perfil está invisível para os outros usuários.
-        </p>
-        <div className="space-y-3 w-full px-4">
-          <button
-            onClick={async () => {
-              try {
-                const { doc, updateDoc } = await import('firebase/firestore');
-                await updateDoc(doc(db, 'users', user.uid), {
-                  'status.ativo': true
-                });
-                alert(`E-mail de confirmação enviado para ${user.email}. Sua conta foi reativada com sucesso! Bem-vindo(a) de volta! 😊`);
-              } catch (e) {
-                console.error(e);
-                alert('Erro ao reativar conta. Por favor, tente novamente.');
-              }
-            }}
-            className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-extrabold rounded-xl text-sm transition-all shadow-lg active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Reativar Minha Conta</span>
-          </button>
-          <button
-            onClick={() => auth.signOut()}
-            className="w-full py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-850 text-slate-600 dark:text-slate-350 rounded-xl text-xs font-bold transition-all border border-slate-200/40 dark:border-slate-800/40 cursor-pointer"
-          >
-            Sair da Conta
-          </button>
-        </div>
-      </div>
-    );
+    return <StandbyScreen user={user} />;
   }
 
   // 5. Onboarding profile block
@@ -973,14 +995,6 @@ function AuthenticatedLayout({
 
       {/* Walkthrough Tour Overlay */}
       {showTour && <WalkthroughTour onClose={() => setShowTour(false)} />}
-
-      {/* Connection Animation Overlay */}
-      {showConnectionAnim && (
-        <ConnectionAnimation onComplete={() => {
-          setShowConnectionAnim(false);
-          sessionStorage.removeItem('just_logged_in');
-        }} />
-      )}
     </div>
   );
 }

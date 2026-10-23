@@ -3,6 +3,9 @@ import http from "http";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 
+// Set DISABLE_HMR to true by default to avoid failing WebSocket connections in iframe environment
+process.env.DISABLE_HMR = process.env.DISABLE_HMR || 'true';
+
 const STATE_MAP: Record<string, string> = {
   'AC': 'Acre',
   'AL': 'Alagoas',

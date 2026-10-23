@@ -6,32 +6,40 @@
 
 const SALT = new Uint8Array([78, 101, 119, 70, 114, 105, 101, 110, 100, 115, 66, 114, 65, 101, 115, 83]);
 
-async function getDeviceKey(): Promise<CryptoKey> {
-  const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'na';
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'app';
-  const rawKeyMaterial = `na_sec_${userAgent}_${origin}`;
-  
-  const enc = new TextEncoder();
-  const keyMaterial = await window.crypto.subtle.importKey(
-    'raw',
-    enc.encode(rawKeyMaterial),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveKey']
-  );
+async function getDeviceKey(): Promise<CryptoKey | null> {
+  if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
+    return null;
+  }
+  try {
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'na';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'app';
+    const rawKeyMaterial = `na_sec_${userAgent}_${origin}`;
+    
+    const enc = new TextEncoder();
+    const keyMaterial = await window.crypto.subtle.importKey(
+      'raw',
+      enc.encode(rawKeyMaterial),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
 
-  return window.crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: SALT,
-      iterations: 10000,
-      hash: 'SHA-256'
-    },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
+    return await window.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: SALT,
+        iterations: 10000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  } catch (err) {
+    console.warn("Could not generate device crypto key:", err);
+    return null;
+  }
 }
 
 function bufferToBase64(buf: ArrayBuffer): string {
@@ -64,6 +72,10 @@ export async function setSecureItem(key: string, data: any): Promise<void> {
 
   try {
     const cryptoKey = await getDeviceKey();
+    if (!cryptoKey) {
+      window.localStorage.setItem(key, `b64:${btoa(unescape(encodeURIComponent(jsonStr)))}`);
+      return;
+    }
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
     const encodedData = new TextEncoder().encode(jsonStr);
 
@@ -94,6 +106,7 @@ export async function getSecureItem<T = any>(key: string): Promise<T | null> {
         const iv = new Uint8Array(base64ToBuffer(parts[2]));
         const ciphertext = base64ToBuffer(parts[3]);
         const cryptoKey = await getDeviceKey();
+        if (!cryptoKey) return null;
 
         const decrypted = await window.crypto.subtle.decrypt(
           { name: 'AES-GCM', iv },
